@@ -111,3 +111,61 @@ beyond) comparison Ines asked about.
 This is a starting proposal, not fixed — flag if any patients have more
 than one DNA draw (e.g. a resection sample later in treatment), since the
 join logic above assumes exactly one DNA VCF per patient.
+
+## `--hla_loh_samplesheet` (optional — only for standalone `--run_hla_loh`)
+
+`--run_hla_loh` normally chains off `--run_dna_variant_calling`'s tumor BAM
+and either `--purity_ploidy_csv` or `--run_purity_ploidy`. If you want to
+run the HLA-LOH branch entirely on its own — no DNA/RNA branches, no
+`dna_samplesheet`/`rna_samplesheet` at all — supply `--hla_loh_samplesheet`
+instead and neither of the other two samplesheets is required.
+
+| column     | required | notes                                                  |
+|------------|----------|---------------------------------------------------------|
+| patient_id | yes      | used as the run tag                                      |
+| tumor_bam  | yes      | already-aligned tumor BAM (SpecHLA's LOH module is tumor-only — see workflows/hla_loh.nf); a `.bai` index next to it is assumed |
+| purity     | yes      | tumor purity, e.g. from Sequenza's top solution           |
+| ploidy     | yes      | tumor ploidy, e.g. from Sequenza's top solution            |
+
+```csv
+patient_id,tumor_bam,purity,ploidy
+NeoTrio_003,/scratch/jo11/MORPHEUS_DNA/done/NeoTrio_003_tumor.bam,0.62,2.1
+```
+
+`main.nf`'s `validateHlaLohSamplesheet()` checks this at launch.
+
+## `--purity_ploidy_csv` (optional — manual purity/ploidy when chaining off DNA_VARIANT_CALLING)
+
+If you're running `--run_hla_loh` chained off `--run_dna_variant_calling`
+but haven't (yet) got `--run_purity_ploidy` producing real output (it's
+currently a stub — see `docs/ARCHITECTURE.md`), supply purity/ploidy
+directly with this flag. Same shape as
+[NeoadjLOH](https://github.com/JaydenBeckwith/NeoadjLOH)'s `PURITY_CSV` /
+`sequenza_top_solutions_summary.csv`: comma-delimited, header
+`sample,purity,ploidy`, where `sample` matches `patient_id` in the
+`dna_samplesheet`.
+
+```csv
+sample,purity,ploidy
+NeoTrio_003,0.62,2.1
+```
+
+## `--sequenza_gender_csv` (required for `--run_purity_ploidy`)
+
+Not a pipeline samplesheet — this is your existing
+`dna_neotrio_gender_metadata.csv`-shaped file, read exactly the way
+`Sequenza_tools`' `sequenza_step2.sh`/`sequenza_step4.sh` do: a numeric
+"melpin" id is pulled from the leading digits of each sample's
+`patient_id`/`meta.id` and looked up against **column 2** of this CSV;
+**column 7** is taken as the gender (lowercased). A header row is assumed
+and skipped. A patient whose melpin has no match is skipped with a warning
+rather than failing the run — same as the original scripts.
+
+```csv
+col1,melpin,col3,col4,col5,col6,gender
+...,3,...,...,...,...,Female
+```
+
+(Column names above are illustrative — only the *position* of melpin
+(2) and gender (7) matters, matching the original `awk -F',' '{...if($2==m)
+print tolower($7)...}'` logic exactly.)

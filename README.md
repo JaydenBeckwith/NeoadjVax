@@ -6,7 +6,8 @@ vaccine development.
 Orchestrated with Nextflow DSL2. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 for the full pipeline design, a diagram of how the branches fit together,
 and a list of open decisions that need input before the newer branches
-(splicing/fusion/ERV neoantigens) are ready to run for real. See
+(splicing/fusion/ERV neoantigens, and the last stub step in the
+purity/ploidy branch) are ready to run for real. See
 [`docs/RUNNING_ON_GADI.md`](docs/RUNNING_ON_GADI.md) for how to actually
 launch this on Gadi — it's not a `qsub script.sh` like the original
 scripts; Nextflow submits every step as its own PBS job for you, but
@@ -43,3 +44,10 @@ images, HLA/pVACseq settings, per-branch on/off switches).
 | `run_splicing_neoantigens` | New, default off — peptide step is a stub |
 | `run_fusion_neoantigens` | New, default off — annotation step is a stub |
 | `run_erv_neoantigens` | New, default off — peptide step is a stub |
+| `run_purity_ploidy` | Ported from `Sequenza_tools`, default off — bam2seqz/binning/merge/fit are real; final purity/ploidy extraction is a stub pending `run-sequenza.R`'s output format |
+| `run_hla_loh` | Ported from [`NeoadjLOH`](https://github.com/JaydenBeckwith/NeoadjLOH), default off — independently runnable, see `assets/samplesheet_schema.md` |
+
+`run_purity_ploidy` and `run_hla_loh` don't need the DNA/RNA branches above
+turned on — `run_hla_loh` can run entirely standalone via
+`--hla_loh_samplesheet`, or chained off `--run_dna_variant_calling` with
+purity/ploidy from `--purity_ploidy_csv`.
