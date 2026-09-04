@@ -10,21 +10,35 @@
 // own work directory already plays that role, so there's no separate cd —
 // whatever run-sequenza.R writes lands directly in this task's outputs.
 //
-// NOT YET REAL: run-sequenza.R itself hasn't been ported — you sent the
-// four PBS wrapper scripts, not this R script (originally read from
-// `/scratch/jo11/neoadjuvant`). It presumably wraps the sequenza R
-// package's sequenza.extract() / sequenza.fit() / sequenza.results() and
-// picks a "top solution" feeding into something like NeoadjLOH's
-// sequenza_top_solutions_summary.csv (sample,purity,ploidy) — but the
-// exact output filenames/columns, gamma/kmin/other fit parameters, and
-// whether the top-solution-per-sample CSV comes out of this script
-// directly or a separate aggregation step are all unknown without seeing
-// it. Send it (and whatever produces the aggregated top-solution CSV, if
-// that's a different script) and it drops into bin/ as
-// bin/run-sequenza.R; modules/local/purity_ploidy/sequenza_extract_top_solution.nf
-// is the deliberately-stubbed next step that turns this process's raw
-// output into the (meta, purity, ploidy) triple HLA_LOH needs — see that
-// file for what's blocked on it.
+// bin/run-sequenza.R is now your real script, unmodified: sequenza.extract()
+// (normalization.method="median", kmin=500, gamma=100) -> sequenza.fit()
+// (ratio.priority=FALSE) -> sequenza.results(), with the chromosome list
+// and female=TRUE/FALSE + XY mapping branched on args[3] exactly as
+// written. Nextflow auto-adds bin/ to PATH, so `command -v run-sequenza.R`
+// below finds it the same way it would find any other bin/ script.
+//
+// IMPORTANT: the R script's own branch is `if (args[3] == "male") ... else
+// <female path>` — literally any value other than the exact string "male"
+// takes the FEMALE path (wrong chromosome list / X-Y handling for a male
+// sample if the sex value isn't spelled exactly right). This pipeline's
+// --sequenza_gender_csv lookup lowercases whatever's in column 7, so it
+// works correctly if your CSV spells out "Male"/"Female" (any case) —
+// but if it instead uses single-letter codes ("M"/"F"), those lowercase to
+// "m"/"f", neither of which equals "male", and every sample would
+// silently run down the female path. Worth confirming your CSV's actual
+// gender values before trusting a real run — see
+// assets/samplesheet_schema.md.
+//
+// run-sequenza.R writes into sequenza.results()'s out.dir =
+// "<sample_name>_OUTPUT" (a subdirectory it creates itself, using
+// sample_name = args[2] verbatim, not the hyphen-sanitized job_name
+// variable) — relative to R's own working directory, which is why this
+// process's script cd's into sequenza_raw_out/ before invoking Rscript, so
+// that ends up at sequenza_raw_out/<meta.id>_OUTPUT/. See
+// modules/local/purity_ploidy/sequenza_extract_top_solution.nf for what's
+// read out of that directory next, and what's still unverified about it
+// (the standard sequenza R package output convention it targets, not
+// something confirmed against a real run of this exact script).
 //
 // Same conda-env caveat as SEQUENZA_MERGE_BINS: this process does NOT run
 // in the sequenza Singularity container, it needs the r_sequenza conda env
@@ -60,7 +74,7 @@ process SEQUENZA_FIT {
 
     RUN_SEQUENZA_R="\$(command -v run-sequenza.R || true)"
     if [ -z "\${RUN_SEQUENZA_R}" ]; then
-        echo "ERROR: run-sequenza.R not found on PATH / in bin/ — this script hasn't been ported yet, see modules/local/purity_ploidy/sequenza_fit.nf header comment. Send it and it drops straight into bin/." >&2
+        echo "ERROR: run-sequenza.R not found on PATH / in bin/ for ${meta.id} — it should be at bin/run-sequenza.R in this pipeline and Nextflow auto-adds bin/ to PATH; check it's actually present/synced." >&2
         exit 1
     fi
 

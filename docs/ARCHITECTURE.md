@@ -5,8 +5,8 @@ feeding pVACseq (the part with an existing design — see
 `[[neoantigen-score]]`), three new discovery branches — splicing,
 gene fusion, and ERV neoantigens — scaffolded at roughly equal depth, and
 two further optional, independently-runnable branches: tumor
-purity/ploidy (Sequenza, `--run_purity_ploidy`, ported from
-`Sequenza_tools`, one stub step left) and HLA loss-of-heterozygosity
+purity/ploidy (Sequenza, `--run_purity_ploidy`, fully ported from
+`Sequenza_tools`, WGS/200bp bins only) and HLA loss-of-heterozygosity
 (SpecHLA, `--run_hla_loh`, ported from your `NeoadjLOH` repo).
 "Independently runnable" means what it says — neither needs the DNA/RNA
 branches above turned on; see `assets/samplesheet_schema.md`.
@@ -88,10 +88,10 @@ flowchart TB
     end
 
     subgraph PURITY["purity_ploidy.nf — --run_purity_ploidy (from Sequenza_tools)"]
-        pp0["Tumor+normal BAM pair"] --> pp1["bam2seqz + seqz_binning<br/>(per chromosome)"]
-        pp1 --> pp1b["Merge to one file per sample<br/>(needs merge-bin*.pl — not sent)"]
-        pp1b --> pp1c["Sequenza R fit<br/>(needs run-sequenza.R — not sent)"]
-        pp1c --> pp2["Extract top solution — TODO,<br/>needs run-sequenza.R output format"]
+        pp0["Tumor+normal BAM pair"] --> pp1["bam2seqz + seqz_binning<br/>(per chromosome, 200bp bins)"]
+        pp1 --> pp1b["merge-bin200-files.pl +<br/>merge-header-bin200.pl"]
+        pp1b --> pp1c["run-sequenza.R<br/>(sequenza.extract/fit/results)"]
+        pp1c --> pp2["Extract top solution<br/>(new code — targets standard<br/>sequenza output, unverified)"]
     end
 
     subgraph LOH["hla_loh.nf — --run_hla_loh (SpecHLA, from NeoadjLOH)"]
@@ -104,12 +104,15 @@ flowchart TB
     style s3 fill:#4a2a2a,stroke:#c66
     style e2 fill:#4a2a2a,stroke:#c66
     style f2 fill:#4a2a2a,stroke:#c66
-    style pp2 fill:#4a2a2a,stroke:#c66
+    style pp2 fill:#4a3a1a,stroke:#c96
 ```
 
 Red boxes = explicit TODO stubs (process exits 1 with a comment explaining
-the open decision) — everything else is ported from your working scripts
-or is new code built to the same standard.
+the open decision). Amber (`pp2`) = real and runs, but is new code (none
+of your scripts pick a top solution) built on a targeted-not-confirmed
+assumption about `run-sequenza.R`'s output shape — worth a spot-check
+before trusting, not a stub. Everything else is ported from your working
+scripts or is new code built to the same standard.
 
 ## Where your original scripts went
 
@@ -171,42 +174,55 @@ choice it needed to make.
   output, so the two can't be merged or shared even though both produce
   "HLA alleles" for the same patient.
 - **Purity/ploidy branch** (`workflows/purity_ploidy.nf`,
-  `--run_purity_ploidy`) — **mostly ported**, one stub left. `git clone`ing
+  `--run_purity_ploidy`) — **fully ported**. `git clone`ing
   [Sequenza_tools](https://github.com/JaydenBeckwith/Sequenza_tools)
   failed from this build environment (private repo, unlike the public
-  `NeoadjLOH`), but you then pasted the four PBS wrapper scripts directly
-  (`sequenza_step1-4.sh`). Steps 1 (bam2seqz + seqz_binning, per
-  chromosome), 2 (merge per-chromosome files into one), and 4 (Sequenza R
-  fit) are all faithfully ported, including the exact gender/sex lookup
-  logic (`--sequenza_gender_csv`, same melpin-column2/gender-column7 CSV
-  format, same skip-with-warning-on-no-match behaviour) and the R-4.0
-  gzip-decompress workaround. Step 3 ("collect merged files into one
-  directory") is dropped entirely — it only existed to move files between
-  two PBS jobs sharing a filesystem, and Nextflow's own channel staging
-  already does that between `SEQUENZA_MERGE_BINS` and `SEQUENZA_FIT`.
-  Two things are still genuinely blocked, not guessed at:
-    1. **`merge-bin200-files.pl` / `merge-header-bin200.pl` / `run-sequenza.R`
-       themselves** — you sent the PBS scripts that call them, not their
-       contents. `modules/local/purity_ploidy/sequenza_merge_bins.nf` and
-       `sequenza_fit.nf` check for them explicitly and fail with a clear
-       message rather than a confusing "command not found"; send them and
-       they drop straight into `bin/` under those exact names (Nextflow
-       auto-adds a pipeline's `bin/` to `PATH`).
-    2. **Extracting `(purity, ploidy)` out of `run-sequenza.R`'s output** —
-       none of the four scripts do this (NeoadjLOH's
-       `sequenza_top_solutions_summary.csv` implies something picks a "top
-       solution" per sample, but that logic wasn't among what you sent).
-       See `modules/local/purity_ploidy/sequenza_extract_top_solution.nf`,
-       the one remaining TODO stub in this branch.
-  Also worth a look: `assets/seqz.header` was reconstructed from
-  sequenza-utils' own public seqz-format docs (chromosome/position/
-  base.ref/depth.normal/depth.tumor/depth.ratio/Af/Bf/zygosity.normal/
-  GC.percent/good.reads/AB.normal/AB.tumor/tumor.strand), not copied from
-  your repo — replace it if your actual header differs. And
-  `merge-bin200-files.pl`'s own filename bakes in "200" (your WGS bin
-  size) — whether it's genuinely bin-size-agnostic for a WES run
-  (`--sequenza_seq_type wes`, 50bp bins) can't be confirmed without the
-  script itself.
+  `NeoadjLOH`), so you pasted the four PBS wrapper scripts
+  (`sequenza_step1-4.sh`) plus, in a follow-up, the three scripts they
+  call out to: `bin/merge-bin200-files.pl`, `bin/merge-header-bin200.pl`,
+  `bin/run-sequenza.R` — all three are your actual scripts, unmodified,
+  just relocated into this pipeline's `bin/` (which Nextflow auto-adds to
+  every process's `PATH`, so they're invoked by bare name exactly as the
+  PBS scripts did). Steps 1 (bam2seqz + seqz_binning, per chromosome), 2
+  (merge, via your two perl scripts), and 4 (Sequenza R fit, via your
+  `run-sequenza.R`) are all faithfully ported, including the exact
+  gender/sex lookup logic (`--sequenza_gender_csv`, same
+  melpin-column2/gender-column7 CSV format, same skip-with-warning-on-no-
+  match behaviour) and the R-4.0 gzip-decompress workaround. Step 3
+  ("collect merged files into one directory") is dropped entirely — it
+  only existed to move files between two PBS jobs sharing a filesystem,
+  and Nextflow's own channel staging already does that between
+  `SEQUENZA_MERGE_BINS` and `SEQUENZA_FIT`.
+  Two things surfaced from actually reading the real scripts, worth
+  knowing about rather than discovering at runtime:
+    1. **WES (50bp bins) doesn't work.** `merge-bin200-files.pl` hardcodes
+       `_bin200` in every filename it looks for — it's not parametrized by
+       bin size at all, confirmed by reading the script, not guessed.
+       `--sequenza_seq_type wes` now errors at launch rather than failing
+       confusingly mid-run; only WGS (200bp, the original's only tested
+       path) works today.
+    2. **`merge-bin200-files.pl` builds its own `seqz.header`** — it
+       `zcat`s the header line straight off chr1's binned file every time
+       it runs. An earlier draft of this branch pre-supplied a
+       reconstructed "standard" `assets/seqz.header` for exactly this
+       purpose; that file and the plumbing around it are gone now that the
+       real script turned out not to need it (it would have just been
+       overwritten anyway).
+  The one piece that's genuinely **new code**, because none of your five
+  scripts do it: turning `run-sequenza.R`'s output into a single
+  `(purity, ploidy)` value per sample (`sequenza_extract_top_solution.nf`
+  + `bin/extract_sequenza_top_solution.py`). It targets
+  `sequenza.results()`'s standard `<sample>_alternative_solutions.txt`
+  output (documented sequenza R package behaviour) and picks the
+  best-scoring row by a tolerantly-matched SLPP/LPP/score column — a
+  defensible mechanical choice, but not confirmed against NeoadjLOH's
+  `sequenza_top_solutions_summary.csv` (whatever built *that* wasn't among
+  what you sent) or against a real run of your `run-sequenza.R`. Spot-check
+  one sample's output before trusting it. Also worth double-checking:
+  `run-sequenza.R`'s branch on sex is a literal `== "male"` string
+  comparison — a `--sequenza_gender_csv` using single-letter "M"/"F" codes
+  instead of spelled-out "male"/"female" would silently misclassify every
+  sample as female (wrong chromosome list, no Y).
 - **Note on a stale comment in your own `NeoadjLOH` repo**: `config.sh`'s
   comment says `PURITY_CSV` is "assumed TAB-delimited" and that comma is
   the fallback case — but `submit_all.sh`'s actual code already parses it
@@ -246,12 +262,13 @@ choice it needed to make.
    1 (any RNA support counts). Whether that's the right bar — vs. a higher
    depth threshold, or a VAF-based check instead of a raw read count — is
    worth deciding once there's real data to look at.
-7. **`merge-bin200-files.pl`, `merge-header-bin200.pl`, `run-sequenza.R`, and
-   whatever builds the top-solution CSV.** The last real gap in the
-   purity/ploidy branch — see the note above. Send them (paste or upload)
-   and `sequenza_merge_bins.nf`/`sequenza_fit.nf`/
-   `sequenza_extract_top_solution.nf` can go from faithful orchestration
-   scaffolding to actually runnable.
+7. **Whether `sequenza_extract_top_solution.nf`'s "best-scoring row" pick
+   is actually right.** See the note above — it's new code (none of your
+   five Sequenza_tools scripts pick a single top solution), targeting the
+   standard sequenza R package output convention, not confirmed against a
+   real run or against NeoadjLOH's `sequenza_top_solutions_summary.csv`.
+   Spot-check it once real data is available; if NeoadjLOH's summary CSV
+   is itself built by a script you have, that should replace this one.
 8. **`HLA_LOH`'s tumor/purity-ploidy join is a silent inner join.** A
    patient with a tumor BAM but no matching purity/ploidy row (wrong
    `sample`/`patient_id` spelling, a row missing from `--purity_ploidy_csv`,
@@ -264,24 +281,21 @@ choice it needed to make.
 **Fully ported / working shape**, ready to run once reference paths, VEP
 cache/plugins, and containers are confirmed on Gadi:
 DNA variant calling, RNA variant calling, RNA-support matching, VEP
-annotation, pVACseq core.
+annotation, pVACseq core, and now the purity/ploidy branch
+(`sequenza_bam2seqz_binned.nf` / `sequenza_merge_bins.nf` / `sequenza_fit.nf`,
+wrapping your actual `bin/merge-bin200-files.pl` /
+`bin/merge-header-bin200.pl` / `bin/run-sequenza.R`, WGS/200bp-bins only).
 
 **New but complete modules**, not yet run against real data:
 xHLA typing (class I + DRB1), SpliceAI-output filtering, STAR-Fusion +
 pVACfuse, Telescope ERV quantification, the SpecHLA HLA-LOH branch
 (`modules/local/hla_loh/*.nf`, ported from your `NeoadjLOH` repo), and the
-purity/ploidy branch's orchestration (`sequenza_bam2seqz_binned.nf`,
-`sequenza_merge_bins.nf`, `sequenza_fit.nf`, ported from your
-`Sequenza_tools` PBS scripts) up to the point where it needs the actual
-perl/R script bodies.
+purity/ploidy branch's top-solution extraction
+(`sequenza_extract_top_solution.nf` — new code, not a port, see the
+caveat above).
 
 **Explicit TODO stubs** (exit 1, comment explains the decision needed):
-splice→peptide, ERV→peptide, AGFusion annotation, and
-`sequenza_extract_top_solution.nf` (purity/ploidy extraction — pending
-`run-sequenza.R`'s real output format, not a design decision like the
-others). `sequenza_merge_bins.nf`/`sequenza_fit.nf` aren't stubs exactly,
-but will fail fast with a clear message until `merge-bin200-files.pl` /
-`merge-header-bin200.pl` / `run-sequenza.R` are dropped into `bin/`.
+splice→peptide, ERV→peptide, AGFusion annotation.
 
 **Unverified detail worth a one-off sanity check**: xHLA's in-container
 entrypoint (`python /opt/bin/run.py`) and image tag (`0.0.0`) are both
@@ -304,17 +318,17 @@ command in that param block's comment before a real run.
 3. Pick a direction on the three open peptide-generation decisions above —
    those block real progress on splicing/fusion/ERV more than any missing
    code does.
-4. Send `merge-bin200-files.pl`, `merge-header-bin200.pl`, `run-sequenza.R`
-   (and whatever builds the top-solution CSV, if separate) so the
-   purity/ploidy branch's last gap can be closed — this also unblocks
-   `--run_hla_loh` chained off `--run_purity_ploidy` (it can already run
-   today via `--hla_loh_samplesheet` or `--purity_ploidy_csv` in the
-   meantime). Also worth confirming: `--sequenza_conda_sh` points at a
-   personal Gadi home directory (`/home/562/jb1592/...`) from the original
-   scripts — update it if that's not where the `r_sequenza` conda env
-   actually lives, and confirm your real `assets/seqz.header` matches the
-   reconstructed one here.
-5. Smoke-test `--run_hla_loh` on one sample first, same as `NeoadjLOH`'s
-   own README recommends (`bash submit_all.sh SAMPLE_ID` there) — nothing
-   in this SpecHLA port has been executed on Gadi yet either. Same goes
-   for the purity/ploidy branch once its last gap is closed.
+4. Confirm `--sequenza_conda_sh` / `--sequenza_conda_bin_fallback` point at
+   wherever the `r_sequenza` conda env actually lives — the defaults are
+   copied from a personal Gadi home directory (`/home/562/jb1592/...`) in
+   the original scripts. Also confirm `--sequenza_gender_csv`'s gender
+   column spells out "male"/"female" rather than single-letter codes (see
+   the purity/ploidy branch's note above) — `run-sequenza.R`'s sex branch
+   would silently misfire otherwise.
+5. Smoke-test both `--run_hla_loh` and `--run_purity_ploidy` on one sample
+   each before a real cohort run — same as `NeoadjLOH`'s own README
+   recommends for HLA-LOH (`bash submit_all.sh SAMPLE_ID`), and doubly
+   worth it for purity/ploidy since `sequenza_extract_top_solution.nf`'s
+   "top solution" pick hasn't been checked against a real
+   `run-sequenza.R` run yet — compare its output to
+   `<sample>_alternative_solutions.txt` by eye the first time.

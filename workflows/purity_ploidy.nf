@@ -1,9 +1,11 @@
 /*
  * Tumor purity/ploidy branch — optional, independently runnable
  * (--run_purity_ploidy, default off). Ported from
- * https://github.com/JaydenBeckwith/Sequenza_tools's four PBS scripts
- * (sequenza_step1-4.sh): per-chromosome bam2seqz + seqz_binning, merge
- * into one per-sample file, then a Sequenza R fit. HLA_LOH
+ * https://github.com/JaydenBeckwith/Sequenza_tools: four PBS wrapper
+ * scripts (sequenza_step1-4.sh) plus the merge-bin200-files.pl /
+ * merge-header-bin200.pl / run-sequenza.R they call — all five now real
+ * and complete (bin/merge-bin200-files.pl, bin/merge-header-bin200.pl,
+ * bin/run-sequenza.R are your actual scripts, unmodified). HLA_LOH
  * (workflows/hla_loh.nf) and the biallelic-loss/whole-genome-doubling
  * question from [[loh-analysis]] both need this branch's purity/ploidy
  * output.
@@ -19,26 +21,30 @@
  *     PBS jobs sharing a filesystem; Nextflow's own channel staging does
  *     that automatically between SEQUENZA_MERGE_BINS and SEQUENZA_FIT, so
  *     there's nothing left for it to do here.
- *   - Steps 2 and 4 still need the actual merge-bin200-files.pl /
- *     merge-header-bin200.pl / run-sequenza.R script bodies — you sent the
- *     PBS wrapper scripts that call them, not the scripts themselves. The
- *     orchestration around them (env setup, sex lookup, decompression,
- *     exact CLI invocations) is a faithful, complete port; the scripts
- *     themselves are checked-for-and-error-if-missing rather than guessed
- *     at. See modules/local/purity_ploidy/sequenza_merge_bins.nf and
- *     sequenza_fit.nf.
- *   - Extracting a single (purity, ploidy) pair out of whatever
- *     run-sequenza.R writes is a genuinely new step none of the four
- *     scripts do (NeoadjLOH's sequenza_top_solutions_summary.csv implies
- *     something aggregates a "top solution" per sample, but that isn't
- *     among the scripts you sent either) — left as an explicit stub, see
- *     modules/local/purity_ploidy/sequenza_extract_top_solution.nf.
+ *   - merge-bin200-files.pl builds its own seqz.header on the fly (from
+ *     chr1's file), so — unlike an earlier draft of this branch —
+ *     nothing needs to be pre-supplied for that; see
+ *     modules/local/purity_ploidy/sequenza_merge_bins.nf.
+ *   - CONFIRMED (reading the real script, not guessed): merge-bin200-files.pl
+ *     hardcodes "_bin200" in every filename — it is NOT bin-size-agnostic.
+ *     So --sequenza_seq_type wes (50bp bins, new plumbing riding on your
+ *     stated convention, not something the original scripts do) can't
+ *     actually run through this branch as ported — see the bin_size guard
+ *     below, which errors at launch rather than failing confusingly deep
+ *     inside SEQUENZA_MERGE_BINS.
+ *   - Extracting a single (purity, ploidy) pair out of run-sequenza.R's
+ *     output (sequenza.results()) is a genuinely new step none of the
+ *     four scripts do — see
+ *     modules/local/purity_ploidy/sequenza_extract_top_solution.nf for
+ *     what it targets and, importantly, what's still unverified about it.
  *
- * Sex lookup: ported exactly as sequenza_step2.sh/step4.sh do it — a
- * numeric "melpin" prefix pulled from the sample id, looked up against
- * column 2 (melpin) / column 7 (gender) of --sequenza_gender_csv (their
- * dna_neotrio_gender_metadata.csv). A sample with no match is skipped with
- * a warning, matching the original's behaviour exactly (not a hard error).
+ * Sex lookup: ported exactly as sequenza_step2.sh/step4.sh's get_gender()
+ * does it — a numeric "melpin" prefix pulled from the sample id, looked up
+ * against column 2 (melpin) / column 7 (gender) of --sequenza_gender_csv
+ * (their dna_neotrio_gender_metadata.csv). A sample with no match is
+ * skipped with a warning, matching the original's behaviour exactly (not
+ * a hard error) — and matters beyond bookkeeping here: run-sequenza.R
+ * branches its whole chromosome list and X/Y handling on this value.
  *
  * Runs on tumor+normal DNA BAM pairs, matched by patient_id — either
  * chained from DNA_VARIANT_CALLING's tumor_bam/normal_bam outputs, or
@@ -82,11 +88,13 @@ workflow PURITY_PLOIDY {
     def gender_lookup = loadSequenzaGenderCsv(params.sequenza_gender_csv)
 
     bin_size = params.sequenza_seq_type == 'wes' ? params.sequenza_bin_wes : params.sequenza_bin_wgs
+    if (bin_size != 200) {
+        error "PURITY_PLOIDY: --sequenza_seq_type ${params.sequenza_seq_type} resolves to a ${bin_size}bp bin size, but bin/merge-bin200-files.pl hardcodes '_bin200' in every filename it looks for (confirmed by reading the actual script) — this branch can currently only run with 200bp (WGS) bins. See workflows/purity_ploidy.nf's header comment."
+    }
 
     fasta      = Channel.fromPath(params.genome_fasta).collect()
     fasta_fai  = Channel.fromPath("${params.genome_fasta}.fai").collect()
     gc_file    = Channel.fromPath(params.sequenza_gc_file).collect()
-    seqz_header = Channel.fromPath(params.sequenza_seqz_header).collect()
 
     pairs_with_sex_ch = tumor_bam_ch
         .map { meta, bam, bai -> tuple(meta.id, meta, bam, bai) }
@@ -122,18 +130,20 @@ workflow PURITY_PLOIDY {
     SEQUENZA_BAM2SEQZ_BINNED(per_chr_ch, fasta, fasta_fai, gc_file, bin_size)
 
     // ---- Step 2: merge the 24 per-chromosome files back into one ----
+    // (merge-bin200-files.pl skips chrY itself for female samples — see
+    // sequenza_merge_bins.nf's header comment — so no filtering needed here)
     binned_grouped_ch = SEQUENZA_BAM2SEQZ_BINNED.out.binned_seqz
         .map { meta, chrom, binned -> tuple(meta.id, meta, binned) }
         .groupTuple(by: 0)
         .join(pairs_ok_ch.map { meta, tb, ti, nb, ni, sex -> tuple(meta.id, sex) }, by: 0)
         .map { patient_id, metas, binned_files, sex -> tuple(metas[0], binned_files, sex, bin_size) }
 
-    SEQUENZA_MERGE_BINS(binned_grouped_ch, seqz_header)
+    SEQUENZA_MERGE_BINS(binned_grouped_ch)
 
     // ---- Step 4: Sequenza R fit ----
     SEQUENZA_FIT(SEQUENZA_MERGE_BINS.out.merged_seqz)
 
-    // ---- purity/ploidy extraction (STUB) ----
+    // ---- purity/ploidy extraction ----
     SEQUENZA_EXTRACT_TOP_SOLUTION(SEQUENZA_FIT.out.raw_results)
 
     emit:
