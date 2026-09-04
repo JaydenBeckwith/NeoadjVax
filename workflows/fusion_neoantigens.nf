@@ -6,7 +6,7 @@
  *
  * HLA alleles reuse whatever PVACSEQ_CORE typed/was given for that
  * patient — this workflow takes an hla_by_patient channel rather than
- * retyping, to avoid running OptiType twice per patient.
+ * retyping, to avoid running xHLA twice per patient.
  */
 
 include { STAR_FUSION }       from '../modules/local/fusion/star_fusion'

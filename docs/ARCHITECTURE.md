@@ -8,7 +8,11 @@ gene fusion, and ERV neoantigens — scaffolded at roughly equal depth.
 Orchestration: Nextflow DSL2. Execution: PBS Pro + Singularity on NCI Gadi
 (`-profile gadi`), reusing Jayden's existing `.sif` images and PBS project
 settings where they already exist, matching how `spliceai-variant-pipeline`
-and the original RNA script already run.
+and the original RNA script already run. **See `docs/RUNNING_ON_GADI.md`
+for how to actually launch this** — `qsub` mostly disappears from view
+(Nextflow submits every step as its own PBS job automatically), but Gadi's
+compute nodes having no external network means containers need a one-time
+pre-caching step from the login node first.
 
 **Containers: Singularity, not Docker**, under `-profile gadi` or
 `-profile singularity` — Gadi's compute nodes have no Docker (no root on
@@ -58,7 +62,7 @@ flowchart TB
     d6 --> match["RNA_SUPPORT_FILTER<br/>(DNA loci ∩ RNA support, per timepoint)"]
     r7 --> match
     match --> vep["VEP annotate<br/>(Wildtype + Frameshift plugins)"]
-    normalbam["Normal DNA reads"] --> hla["OptiType HLA typing<br/>(class I; class II TODO)"]
+    normalbam["Normal DNA reads"] --> hla["xHLA typing<br/>(class I + DRB1; DQB1/DPB1 excluded)"]
     hla --> pvacseq["pVACseq"]
     vep --> pvacseq
     pvacseq --> core["Core neoantigen calls<br/>(per patient × timepoint)"]
@@ -109,14 +113,21 @@ choice it needed to make.
   depth (`--min_rna_alt_reads`, default 1). This is the one part of the
   core backbone that's genuinely new rather than ported — worth a close
   look before trusting it on real data.
-- **HLA typing** (`modules/local/hla_typing/optitype.nf`) — the DNA script
-  took `--hla` as a hand-supplied list; nothing typed it. OptiType now runs
-  on the **normal/germline** DNA BAM specifically, not tumor, to avoid
-  bias from tumor HLA-LOH — which `[[loh-analysis]]` is already tracking
+- **HLA typing** (`modules/local/hla_typing/xhla.nf`) — the DNA script
+  took `--hla` as a hand-supplied list; nothing typed it. xHLA now runs on
+  the **normal/germline** DNA BAM specifically, not tumor, to avoid bias
+  from tumor HLA-LOH — which `[[loh-analysis]]` is already tracking
   separately, so typing off tumor reads here would fold that effect into
-  the neoantigen calls unintentionally. Class II typing
-  (`arcashla.nf`) is a TODO stub — `[[neoantigen-score]]` calls for both
-  classes but neither script did class II at all.
+  the neoantigen calls unintentionally. xHLA types both classes
+  (`[[neoantigen-score]]` calls for both, and neither original script did
+  class II at all) from a single indexed BAM in one pass — but it only
+  types the beta chain for DQB1/DPB1, and pVACtools needs those paired
+  with an alpha chain (DQA1/DPA1) xHLA doesn't provide, so those two loci
+  are typed but excluded from what reaches pVACseq (see
+  `bin/parse_xhla_result.py`). Only class I (A/B/C) + DRB1 are usable
+  today. Also: `pvacseq_algorithms` still defaults to `MHCflurry` (class I
+  only) — DRB1 alleles won't actually get predicted against until a class
+  II algorithm is added to that param too.
 - **Two-samplesheet input design** (`--dna_samplesheet` / `--rna_samplesheet`,
   joined on `patient_id`) — because DNA is one baseline draw per patient and
   RNA is longitudinal (PRE/ED1/ED2/CLND). See `assets/samplesheet_schema.md`.
@@ -160,11 +171,16 @@ DNA variant calling, RNA variant calling, RNA-support matching, VEP
 annotation, pVACseq core.
 
 **New but complete modules**, not yet run against real data:
-OptiType HLA typing (class I), SpliceAI-output filtering, STAR-Fusion +
+xHLA typing (class I + DRB1), SpliceAI-output filtering, STAR-Fusion +
 pVACfuse, Telescope ERV quantification.
 
 **Explicit TODO stubs** (exit 1, comment explains the decision needed):
-splice→peptide, ERV→peptide, AGFusion annotation, arcasHLA class II.
+splice→peptide, ERV→peptide, AGFusion annotation.
+
+**Unverified detail worth a one-off sanity check**: xHLA's in-container
+entrypoint (`python /opt/bin/run.py`) and image tag (`0.0.0`) are both
+sourced from a third-party Nextflow wrapper for xHLA, not xHLA's own docs
+— see `modules/local/hla_typing/xhla.nf`'s comments.
 
 ## Next steps
 

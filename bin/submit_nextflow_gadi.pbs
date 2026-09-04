@@ -1,0 +1,44 @@
+#!/bin/bash
+#
+# Submits the Nextflow DRIVER process itself as its own small PBS job —
+# NCI's documented pattern for running Nextflow pipelines on Gadi (see
+# docs/RUNNING_ON_GADI.md). This job just orchestrates: it stays cheap
+# (1 cpu, modest mem) and in turn submits every pipeline step as its OWN
+# qsub job via the pbspro executor already configured in conf/gadi.config
+# (executor.queueSize = 30 caps how many run concurrently, matching the
+# original RNA script's MAX_CONCURRENT).
+#
+# BEFORE first use: run bin/prefetch_containers.sh from the LOGIN node —
+# this driver job runs on a compute node with no external network, so
+# every container must already be cached or the run will fail on the
+# first process that needs one.
+#
+# Usage: qsub bin/submit_nextflow_gadi.pbs
+# (edit the nextflow run command below with your actual samplesheets/paths first)
+
+#PBS -N neoadjvax_driver
+#PBS -P jo11
+#PBS -q normal
+#PBS -l ncpus=1
+#PBS -l mem=4GB
+#PBS -l walltime=48:00:00
+#PBS -l storage=scratch/jo11+gdata/jo11
+#PBS -l wd
+#PBS -o pbs_logs/nextflow_driver.o
+#PBS -e pbs_logs/nextflow_driver.e
+
+set -euo pipefail
+module purge
+module load nextflow
+module load singularity
+
+mkdir -p pbs_logs
+
+nextflow run main.nf \
+    -profile gadi \
+    --dna_samplesheet dna_samples.csv \
+    --rna_samplesheet rna_samples.csv \
+    --vep_cache /path/to/vep_cache \
+    --vep_plugins /path/to/vep_plugins \
+    --outdir results/ \
+    -resume

@@ -6,18 +6,27 @@
  *                                 ├─▶ RNA_SUPPORT_FILTER (per RNA timepoint) ─▶ VEP_ANNOTATE ─▶ PVACSEQ_RUN
  *   per-timepoint RNA calls ─────┘                                                    ▲
  *                                                                                       │
- *   normal (germline) DNA reads ─▶ HLA_TYPING_OPTITYPE (class I, once per patient) ─────┘
+ *   normal (germline) DNA reads ─▶ HLA_TYPING_XHLA (class I + II, once per patient) ────┘
  *                                  (skipped per-patient if hla_alleles supplied in the
  *                                   DNA samplesheet)
  *
  * One DNA VCF per patient is checked against RNA support at every timepoint
  * that patient has — this is what produces the baseline-vs-week-6(+)
  * comparison [[ines]] asked about.
+ *
+ * HLA typing note: xHLA types class I (A/B/C) and class II DRB1/DQB1/DPB1,
+ * but only the beta chain for DQ/DP — pVACtools needs those paired with an
+ * alpha chain (DQA1/DPA1) it doesn't type, so HLA_TYPING_XHLA excludes
+ * DQB1/DPB1 from the allele string it hands to PVACSEQ_RUN (see that
+ * module's comments and bin/parse_xhla_result.py). Only class I + DRB1
+ * reach pVACseq today. Also note: pvacseq_algorithms currently defaults to
+ * MHCflurry (class I only) — DRB1 alleles won't actually get predicted
+ * against until a class II algorithm is added to that param too.
  */
 
 include { RNA_SUPPORT_FILTER }   from '../modules/local/matching/rna_support_filter'
 include { VEP_ANNOTATE }         from '../modules/local/dna/vep_annotate'
-include { HLA_TYPING_OPTITYPE }  from '../modules/local/hla_typing/optitype'
+include { HLA_TYPING_XHLA }      from '../modules/local/hla_typing/xhla'
 include { PVACSEQ_RUN }          from '../modules/local/pvactools/pvacseq'
 
 workflow PVACSEQ_CORE {
@@ -60,9 +69,9 @@ workflow PVACSEQ_CORE {
         .join(patients_needing_typing_ch.map { pid -> tuple(pid, true) })
         .map { patient_id, meta, bam, bai, _flag -> tuple(meta, bam, bai) }
 
-    HLA_TYPING_OPTITYPE(normal_bam_for_typing_ch)
+    HLA_TYPING_XHLA(normal_bam_for_typing_ch)
 
-    typed_hla_ch = HLA_TYPING_OPTITYPE.out.hla_alleles
+    typed_hla_ch = HLA_TYPING_XHLA.out.hla_alleles
         .map { meta, alleles -> tuple(meta.id, alleles) }
 
     hla_by_patient_ch = manual_hla_ch.mix(typed_hla_ch)

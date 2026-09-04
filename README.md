@@ -6,11 +6,21 @@ vaccine development.
 Orchestrated with Nextflow DSL2. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 for the full pipeline design, a diagram of how the branches fit together,
 and a list of open decisions that need input before the newer branches
-(splicing/fusion/ERV neoantigens) are ready to run for real.
+(splicing/fusion/ERV neoantigens) are ready to run for real. See
+[`docs/RUNNING_ON_GADI.md`](docs/RUNNING_ON_GADI.md) for how to actually
+launch this on Gadi — it's not a `qsub script.sh` like the original
+scripts; Nextflow submits every step as its own PBS job for you, but
+compute nodes having no external network means a one-time container
+pre-caching step is required first.
 
 ## Quick start
 
 ```bash
+# once, from a Gadi LOGIN node (see docs/RUNNING_ON_GADI.md)
+bash bin/prefetch_containers.sh
+
+# then either qsub bin/submit_nextflow_gadi.pbs, or run this directly
+# in a screen/tmux session on the login node:
 nextflow run main.nf -profile gadi \
     --dna_samplesheet dna_samples.csv \
     --rna_samplesheet rna_samples.csv \
