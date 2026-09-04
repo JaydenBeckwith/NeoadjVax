@@ -24,17 +24,25 @@ include { FILTER_STANDARD_CHROMS }               from '../modules/local/dna/filt
 workflow DNA_VARIANT_CALLING {
 
     take:
-    dna_samplesheet_ch   // [patient_id, tumor_r1, tumor_r2, normal_r1, normal_r2, tumor_bam, normal_bam, hla_alleles]
+    dna_samplesheet_ch   // [patient_id, tumor_r1, tumor_r2, normal_r1, normal_r2, tumor_bam, normal_bam, dna_vcf, hla_alleles]
 
     main:
     fasta = Channel.fromPath(params.genome_fasta).collect()
 
-    // NOTE: BWA_INDEX always runs even for an all-BAM cohort (Nextflow
-    // can't tell in advance that no row will need it) — harmless, just a
-    // few wasted minutes on Gadi. Not worth the extra complexity to gate it.
+    // NOTE: BWA_INDEX always runs even for an all-BAM/all-VCF cohort
+    // (Nextflow can't tell in advance that no row will need it) —
+    // harmless, just a few wasted minutes on Gadi. Not worth the extra
+    // complexity to gate it.
     BWA_INDEX(fasta)
     SAMTOOLS_FAIDX(fasta)
     PICARD_CREATE_SEQUENCE_DICTIONARY(fasta)
+
+    // patients who already have a called somatic VCF skip alignment AND
+    // calling entirely — everything below builds only from the rest
+    vcf_rows_ch = dna_samplesheet_ch
+        .filter { row -> row.dna_vcf }
+        .map { row -> tuple([id: row.patient_id], file(row.dna_vcf)) }
+    calling_rows_ch = dna_samplesheet_ch.filter { row -> !row.dna_vcf }
 
     // fan each sample row out into a (meta, sample_type, ...) record per
     // tumor/normal, mirroring the original script's two ThreadPoolExecutor
@@ -42,7 +50,7 @@ workflow DNA_VARIANT_CALLING {
     // already-aligned BAM the row supplies (tumor_bam/normal_bam columns;
     // see assets/samplesheet_schema.md). A row can mix both, e.g. an
     // already-aligned normal but a tumor still needing alignment.
-    reads_ch = dna_samplesheet_ch.flatMap { row ->
+    reads_ch = calling_rows_ch.flatMap { row ->
         def meta = [id: row.patient_id]
         ['tumor', 'normal'].collect { sample_type ->
             def bam_path = row["${sample_type}_bam"]
@@ -88,12 +96,19 @@ workflow DNA_VARIANT_CALLING {
 
     MUTECT2(tn_pairs_ch, fasta, SAMTOOLS_FAIDX.out.fai, PICARD_CREATE_SEQUENCE_DICTIONARY.out.dict)
     FILTER_MUTECT_CALLS(MUTECT2.out.vcf, fasta, SAMTOOLS_FAIDX.out.fai, PICARD_CREATE_SEQUENCE_DICTIONARY.out.dict)
-    FILTER_STANDARD_CHROMS(FILTER_MUTECT_CALLS.out.vcf)
+
+    // user-supplied VCFs still go through the standard-chroms filter for
+    // consistency with called VCFs, since RNA_SUPPORT_FILTER/VEP downstream
+    // expect that either way — cheap step, worth the uniformity
+    FILTER_STANDARD_CHROMS(FILTER_MUTECT_CALLS.out.vcf.mix(vcf_rows_ch))
 
     emit:
     filtered_vcf = FILTER_STANDARD_CHROMS.out.vcf   // [meta, vcf]
     tumor_bam    = MARK_DUPLICATES.out.bam.filter { it[1] == 'tumor' }.map { meta, st, bam, bai -> tuple(meta, bam, bai) }
     // normal (germline) BAM, not tumor — HLA typing runs on this to avoid
-    // bias from tumor HLA-LOH, which [[loh-analysis]] is tracking separately
+    // bias from tumor HLA-LOH, which [[loh-analysis]] is tracking separately.
+    // NOTE: a dna_vcf-only patient has no entry here at all (no BAM was ever
+    // built) — main.nf's validateDnaSamplesheet() requires hla_alleles to be
+    // supplied directly for such patients, since there's nothing to type from.
     normal_bam   = MARK_DUPLICATES.out.bam.filter { it[1] == 'normal' }.map { meta, st, bam, bai -> tuple(meta, bam, bai) }
 }

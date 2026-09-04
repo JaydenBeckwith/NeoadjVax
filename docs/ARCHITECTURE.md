@@ -19,12 +19,20 @@ exists only as an optional local-dev convenience (mirrors the original DNA
 script's Docker calls) for iterating off Gadi — not how this runs in
 production. See the block's own comment in `nextflow.config` for detail.
 
-**Already-aligned input**: both branches accept pre-aligned BAMs and skip
-the alignment step — DNA per-row via `tumor_bam`/`normal_bam` columns
-(skips FastQC/Trim Galore/BWA-MEM, still runs AddReadGroups+MarkDuplicates),
-RNA via `--rna_skip_realignment true` (skips BAM→FASTQ→STAR entirely,
-pipeline-wide — only safe if those BAMs already match this pipeline's STAR
-settings). See `assets/samplesheet_schema.md`.
+**Already-aligned / already-called input**: three tiers per patient (DNA)
+or patient-timepoint (RNA) — FASTQ (full pipeline), an already-aligned BAM
+(skips QC/trim/align), or an already-called VCF (skips alignment AND
+variant calling entirely). DNA: `tumor_bam`/`normal_bam` or a
+patient-level `dna_vcf` column, per row. RNA: `rna_bam` (realigned via
+STAR by default, or fed straight through with `--rna_skip_realignment
+true` — a pipeline-wide flag, not per-row, since the original script
+always realigned intentionally) or a per-timepoint `rna_vcf` column. A
+`dna_vcf`-only patient with no normal sample must supply `hla_alleles`
+directly — there's no normal BAM left to type HLA from, and
+`main.nf`'s `validateDnaSamplesheet()`/`validateRnaSamplesheet()` catch
+this and every other missing-input combination at launch, before any
+compute starts. See `assets/samplesheet_schema.md` for the full column
+reference and examples.
 
 ## Pipeline graph
 

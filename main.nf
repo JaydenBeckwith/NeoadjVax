@@ -19,6 +19,43 @@
 
 nextflow.enable.dsl = 2
 
+// ---------------------------------------------------------------------
+// Samplesheet validation — runs synchronously at launch (splitCsv() on a
+// plain `file()` reads it eagerly, not as a reactive Channel) so a missing
+// or inconsistent row fails immediately with a clear message instead of
+// surfacing as a confusing empty-channel gap deep into execution. Worth
+// having now that each row can supply FASTQ, an already-aligned BAM, or an
+// already-called VCF, in any combination.
+// ---------------------------------------------------------------------
+def validateDnaSamplesheet(path) {
+    file(path).splitCsv(header: true).each { row ->
+        def hasVcf  = row.dna_vcf as boolean
+        def hasHla  = row.hla_alleles as boolean
+        ['tumor', 'normal'].each { sample_type ->
+            def hasBam = row["${sample_type}_bam"] as boolean
+            def hasFq  = (row["${sample_type}_r1"] as boolean) && (row["${sample_type}_r2"] as boolean)
+            if (!hasVcf && !hasBam && !hasFq) {
+                error "dna_samplesheet: patient ${row.patient_id} has no ${sample_type}_bam and no complete ${sample_type}_r1/${sample_type}_r2 pair, and no dna_vcf to fall back on"
+            }
+        }
+        def hasNormalSource = (row.normal_bam as boolean) || ((row.normal_r1 as boolean) && (row.normal_r2 as boolean))
+        if (hasVcf && params.run_pvacseq_core && !hasHla && !hasNormalSource) {
+            error "dna_samplesheet: patient ${row.patient_id} supplies dna_vcf with no normal sample and no hla_alleles — PVACSEQ_CORE has no normal BAM to type HLA from and no manual override. Add hla_alleles, or a normal_bam/normal_r1+r2 pair."
+        }
+    }
+}
+
+def validateRnaSamplesheet(path) {
+    file(path).splitCsv(header: true).each { row ->
+        def hasVcf = row.rna_vcf as boolean
+        def hasBam = row.rna_bam as boolean
+        def hasFq  = (row.rna_fastq_r1 as boolean) && (row.rna_fastq_r2 as boolean)
+        if (!hasVcf && !hasBam && !hasFq) {
+            error "rna_samplesheet: patient ${row.patient_id} timepoint ${row.timepoint} has none of rna_vcf, rna_bam, or a complete rna_fastq_r1/rna_fastq_r2 pair"
+        }
+    }
+}
+
 include { DNA_VARIANT_CALLING }  from './workflows/dna_variant_calling'
 include { RNA_VARIANT_CALLING }  from './workflows/rna_variant_calling'
 include { PVACSEQ_CORE }         from './workflows/pvacseq_core'
@@ -33,11 +70,13 @@ workflow {
 
     if (params.run_dna_variant_calling || params.run_pvacseq_core) {
         if (!params.dna_samplesheet) error "Please provide --dna_samplesheet (see assets/samplesheet_schema.md)"
+        validateDnaSamplesheet(params.dna_samplesheet)
         dna_samplesheet_ch = Channel.fromPath(params.dna_samplesheet).splitCsv(header: true)
     }
 
     if (params.run_rna_variant_calling || params.run_pvacseq_core) {
         if (!params.rna_samplesheet) error "Please provide --rna_samplesheet (see assets/samplesheet_schema.md)"
+        validateRnaSamplesheet(params.rna_samplesheet)
         rna_samplesheet_ch = Channel.fromPath(params.rna_samplesheet).splitCsv(header: true)
     }
 

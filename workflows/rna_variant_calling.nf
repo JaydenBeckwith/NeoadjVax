@@ -31,7 +31,7 @@ include { VARIANTS_TO_TABLE }                        from '../modules/local/rna/
 workflow RNA_VARIANT_CALLING {
 
     take:
-    rna_samplesheet_ch   // [patient_id, timepoint, rna_bam] or [..., rna_fastq_r1, rna_fastq_r2]
+    rna_samplesheet_ch   // [patient_id, timepoint, rna_bam] or [..., rna_fastq_r1, rna_fastq_r2] or [..., rna_vcf]
 
     main:
     fasta = Channel.fromPath(params.genome_fasta).collect()
@@ -47,8 +47,15 @@ workflow RNA_VARIANT_CALLING {
     TABIX_1000G(Channel.fromPath(params.known_1000g))
     TABIX_DBSNP(Channel.fromPath(params.known_dbsnp))
 
-    // split on whether the row supplies a BAM (realign) or FASTQs directly
-    samples_ch = rna_samplesheet_ch.map { row ->
+    // patient-timepoints that already have a called+filtered RNA VCF skip
+    // alignment AND calling entirely
+    vcf_rows_ch = rna_samplesheet_ch
+        .filter { row -> row.rna_vcf }
+        .map { row -> tuple([id: row.patient_id, timepoint: row.timepoint], file(row.rna_vcf)) }
+
+    // split the rest on whether the row supplies a BAM (realign, unless
+    // --rna_skip_realignment) or FASTQs directly
+    samples_ch = rna_samplesheet_ch.filter { row -> !row.rna_vcf }.map { row ->
         def meta = [id: row.patient_id, timepoint: row.timepoint]
         tuple(meta, row)
     }
@@ -100,9 +107,12 @@ workflow RNA_VARIANT_CALLING {
         TABIX_DBSNP.out.indexed.map { it[0] }, TABIX_DBSNP.out.indexed.map { it[1] }
     )
     VARIANT_FILTRATION_RNA(HAPLOTYPE_CALLER_RNA.out.vcf, fasta, SAMTOOLS_FAIDX.out.fai, PICARD_CREATE_SEQUENCE_DICTIONARY.out.dict)
+    // VariantsToTable is a QC/reporting convenience, not consumed
+    // downstream — skipped for rna_vcf rows since there's no reason to
+    // regenerate it if a table wasn't already supplied alongside
     VARIANTS_TO_TABLE(VARIANT_FILTRATION_RNA.out.vcf)
 
     emit:
-    filtered_vcf = VARIANT_FILTRATION_RNA.out.vcf   // [meta(id, timepoint), vcf]
-    recal_bam    = APPLY_BQSR.out.bam               // needed downstream for RNA coverage/VAF annotation
+    filtered_vcf = VARIANT_FILTRATION_RNA.out.vcf.mix(vcf_rows_ch)   // [meta(id, timepoint), vcf]
+    recal_bam    = APPLY_BQSR.out.bam               // needed downstream for RNA coverage/VAF annotation; empty for rna_vcf-only timepoints
 }

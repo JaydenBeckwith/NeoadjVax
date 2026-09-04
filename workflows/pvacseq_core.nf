@@ -44,9 +44,12 @@ workflow PVACSEQ_CORE {
     VEP_ANNOTATE(RNA_SUPPORT_FILTER.out.vcf, fasta, vep_cache, vep_plugins)
 
     // --- HLA alleles: manual override from the DNA samplesheet, else type it ---
+    // samplesheet field uses '|' as the allele separator (a literal comma
+    // would be parsed as another CSV column) — converted to the ','-joined
+    // format pvacseq run expects, matching HLA_TYPING_OPTITYPE's output shape
     manual_hla_ch = dna_samplesheet_ch
         .filter { row -> row.hla_alleles }
-        .map { row -> tuple(row.patient_id, row.hla_alleles) }
+        .map { row -> tuple(row.patient_id, row.hla_alleles.replace('|', ',')) }
 
     patients_needing_typing_ch = dna_samplesheet_ch
         .filter { row -> !row.hla_alleles }
