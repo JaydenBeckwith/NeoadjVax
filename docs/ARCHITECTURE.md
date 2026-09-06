@@ -46,6 +46,14 @@ reference and examples.
 
 ## Pipeline graph
 
+The optional `ERV_DNA` workflow adds a separate DNA insertion-evidence layer:
+tumour and normal BAMs (direct or from `DNA_VARIANT_CALLING`) each run through
+ERVcaller v1.4. Genome/TE reference indexing is cached once, followed by
+per-patient/per-role VCF, evidence, log and status outputs. No connection to
+the peptide stub or automated intersection with Telescope is made.
+`--erv_generate_peptides false` also allows the RNA branch to finish at
+Telescope. See [ERVcaller design and setup](ERV_DNA.md).
+
 ```mermaid
 flowchart TB
     subgraph DNA["DNA branch — dna_variant_calling.nf"]
@@ -108,6 +116,11 @@ flowchart TB
     end
 
     style s3 fill:#4a2a2a,stroke:#c66
+    subgraph ERVDNA["erv_dna.nf — optional DNA insertion evidence"]
+        ed0["Tumour + normal DNA BAMs"] --> ed1["ERVcaller v1.4, per sample"]
+        edr["Genome + TE FASTA / cached indices"] --> ed1
+        ed1 --> ed2["VCF + evidence TSV + provenance"]
+    end
     style e2 fill:#4a2a2a,stroke:#c66
     style f2 fill:#4a2a2a,stroke:#c66
     style pp2 fill:#4a3a1a,stroke:#c96

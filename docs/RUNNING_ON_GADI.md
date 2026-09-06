@@ -91,6 +91,11 @@ itself lives.
 
 ## Troubleshooting
 
+For the optional ERVcaller DNA branch, build and transfer a custom SIF before
+submission and pass its local path with `--ervcaller_container`. The normal
+container prefetch helper does not provide this image. See
+[ERVcaller on DNA](ERV_DNA.md) for the build recipe and required references.
+
 **A step fails immediately with a network/connection error, and its log
 mentions pulling or fetching an image**: a container wasn't pre-cached, or
 `nextflow.config` was changed since the last `prefetch_containers.sh` run.

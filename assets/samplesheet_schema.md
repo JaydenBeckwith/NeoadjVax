@@ -9,6 +9,16 @@ all but one — `patient_id` is the join key between the two.
 
 ## `--dna_samplesheet`
 
+The optional ERVcaller DNA branch also uses this sheet. Standalone
+`--pipelines erv_dna` requires `patient_id,tumor_bam,normal_bam`, with
+coordinate-sorted BAMs and adjacent `.bam.bai` or `.bai` indices. Patient IDs
+must be unique and contain only letters, digits, underscores, hyphens and
+dots, starting with a letter or digit. Both roles are required.
+With `dna_variant_calling,erv_dna`, FASTQs can instead go through the DNA
+branch and its resulting BAMs are reused. Rows containing `dna_vcf` must
+still provide both indexed BAMs for ERVcaller; the VCF cannot substitute for
+reads. See [DNA ERV inputs and references](../docs/ERV_DNA.md).
+
 For each of tumor/normal, supply **either** a FASTQ pair **or** an
 already-aligned BAM — not both. A row can mix them (e.g. normal already
 aligned, tumor still raw FASTQ); each sample_type is handled independently.

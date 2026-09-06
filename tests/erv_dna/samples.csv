@@ -1,0 +1,3 @@
+patient_id,tumor_bam,normal_bam
+P1,tests/erv_dna/dummy.bam,tests/erv_dna/dummy.bam
+P2,tests/erv_dna/dummy.bam,tests/erv_dna/dummy.bam

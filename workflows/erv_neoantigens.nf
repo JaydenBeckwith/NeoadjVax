@@ -60,8 +60,13 @@ workflow ERV_NEOANTIGENS {
     ERV_STAR_ALIGN(fastq_ch, star_index)
     SAMTOOLS_COLLATE(ERV_STAR_ALIGN.out.bam)
     TELESCOPE_QUANT(SAMTOOLS_COLLATE.out.bam, erv_gtf)
-    ERV_TO_PEPTIDE(TELESCOPE_QUANT.out.report)
+    peptide_ch = Channel.empty()
+    if (params.erv_generate_peptides) {
+        ERV_TO_PEPTIDE(TELESCOPE_QUANT.out.report)
+        peptide_ch = ERV_TO_PEPTIDE.out.peptide_fasta
+    }
 
     emit:
-    peptide_fasta = ERV_TO_PEPTIDE.out.peptide_fasta
+    report = TELESCOPE_QUANT.out.report
+    peptide_fasta = peptide_ch
 }

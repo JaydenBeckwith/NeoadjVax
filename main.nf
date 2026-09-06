@@ -54,6 +54,8 @@ def applyPipelineSelection(String pipelinesParam) {
         'fusionneoantigen'   : ['run_fusion_neoantigens'],
         'ervneoantigen'      : ['run_erv_neoantigens'],
         'erv'                : ['run_erv_neoantigens'],
+        'ervdna'             : ['run_erv_dna'],
+        'ervcaller'          : ['run_erv_dna'],
         'purityploidy'       : ['run_purity_ploidy'],
         'sequenza'           : ['run_purity_ploidy'],
         'hlaloh'             : ['run_hla_loh'],
@@ -62,7 +64,7 @@ def applyPipelineSelection(String pipelinesParam) {
     def allFlags = [
         'run_dna_variant_calling', 'run_rna_variant_calling', 'run_pvacseq_core',
         'run_splicing_neoantigens', 'run_fusion_neoantigens', 'run_erv_neoantigens',
-        'run_purity_ploidy', 'run_hla_loh',
+        'run_purity_ploidy', 'run_hla_loh', 'run_erv_dna',
     ]
     def normalize = { String s -> s.toLowerCase().replaceAll(/[^a-z0-9]/, '') }
 
@@ -144,6 +146,7 @@ include { PVACSEQ_CORE }         from './workflows/pvacseq_core'
 include { SPLICING_NEOANTIGENS } from './workflows/splicing_neoantigens'
 include { FUSION_NEOANTIGENS }   from './workflows/fusion_neoantigens'
 include { ERV_NEOANTIGENS }      from './workflows/erv_neoantigens'
+include { ERV_DNA; validateErvDnaSamplesheet } from './workflows/erv_dna'
 include { PURITY_PLOIDY }        from './workflows/purity_ploidy'
 include { HLA_LOH }              from './workflows/hla_loh'
 
@@ -156,9 +159,12 @@ workflow {
     dna_samplesheet_ch = Channel.empty()
     rna_samplesheet_ch = Channel.empty()
 
-    if (params.run_dna_variant_calling || params.run_pvacseq_core) {
+    if (params.run_dna_variant_calling || params.run_pvacseq_core || params.run_erv_dna) {
         if (!params.dna_samplesheet) error "Please provide --dna_samplesheet (see assets/samplesheet_schema.md)"
-        validateDnaSamplesheet(params.dna_samplesheet)
+        if (params.run_dna_variant_calling || params.run_pvacseq_core) {
+            validateDnaSamplesheet(params.dna_samplesheet)
+        }
+        if (params.run_erv_dna) validateErvDnaSamplesheet(params.dna_samplesheet, params.run_dna_variant_calling)
         dna_samplesheet_ch = Channel.fromPath(params.dna_samplesheet).splitCsv(header: true)
     }
 
@@ -208,6 +214,10 @@ workflow {
 
     if (params.run_erv_neoantigens) {
         ERV_NEOANTIGENS(rna_samplesheet_ch)
+    }
+
+    if (params.run_erv_dna) {
+        ERV_DNA(dna_samplesheet_ch, dna_tumor_bam_ch, dna_normal_bam_ch, params.run_dna_variant_calling)
     }
 
     // ---------------------------------------------------------------

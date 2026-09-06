@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600" viewBox="0 0 1600 1600" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1810" viewBox="0 0 1600 1810" role="img" aria-labelledby="title desc">
 <title id="title">NeoadjVax workflow map</title>
-<desc id="desc">Metromap of eight Nextflow branches. DNA and RNA variant calling feed RNA-support filtering, VEP and pVACseq, with HLA alleles supplied separately. RNA can be from any timepoint. Optional fusion, splicing and ERV routes have unfinished downstream stages. Sequenza purity and ploidy can feed SpecHLA HLA-LOH analysis. Repeated input stations denote the same input types, not dependencies between lanes.</desc>
+<desc id="desc">Metromap of nine Nextflow branches. DNA and RNA variant calling feed RNA-support filtering, VEP and pVACseq, with HLA alleles supplied separately. RNA can be from any timepoint. Optional fusion, splicing and RNA ERV routes have unfinished peptide stages. ERVcaller produces separate DNA insertion evidence for tumour and normal. Sequenza purity and ploidy can feed SpecHLA HLA-LOH analysis. Repeated input stations denote the same input types, not dependencies between lanes.</desc>
 <style>
 text {font-family:Arial,Helvetica,sans-serif;fill:#20303d}
 .title {font-size:38px;font-weight:700}
@@ -14,7 +14,7 @@ text {font-family:Arial,Helvetica,sans-serif;fill:#20303d}
 .station {fill:white;stroke:#20303d;stroke-width:3}
 .pending {stroke-dasharray:10 12}
 </style>
-<rect width="1600" height="1600" fill="white"/>
+<rect width="1600" height="1810" fill="white"/>
 <text x="70" y="65" class="title" text-anchor="start">NeoadjVax workflow map</text>
 <text x="70" y="101" class="subtitle" text-anchor="start">Nextflow DSL2 / melanoma neoantigen discovery</text>
 <text x="1530" y="65" class="small" text-anchor="end">READ LEFT TO RIGHT</text>
@@ -108,6 +108,21 @@ text {font-family:Arial,Helvetica,sans-serif;fill:#20303d}
 <path d="M1500 1132v26" stroke="#20303d" stroke-width="6"/>
 <text x="1500" y="1184" class="label" text-anchor="end">ERV peptides</text>
 <text x="1500" y="1211" class="todo" text-anchor="end">Planned output</text>
+<!-- DNA insertion evidence is separate from the RNA expression route. -->
+<path d="M100 1340 H1500" class="track" stroke="#be7550"/>
+<path d="M93 1330h10l9 10-9 10h-10z" fill="#20303d"/>
+<text x="205" y="1279" class="label" text-anchor="middle">Tumour + normal DNA</text>
+<text x="205" y="1307" class="note" text-anchor="middle">BAMs / called independently</text>
+<circle cx="700" cy="1340" r="11" class="station"/>
+<text x="700" y="1279" class="label" text-anchor="middle">ERVcaller</text>
+<text x="700" y="1307" class="note" text-anchor="middle">Non-reference insertions</text>
+<circle cx="1150" cy="1340" r="11" class="station"/>
+<text x="1150" y="1279" class="label" text-anchor="middle">VCF + evidence</text>
+<text x="1150" y="1307" class="note" text-anchor="middle">Read support / genotype / QC</text>
+<path d="M1500 1327v26" stroke="#20303d" stroke-width="6"/>
+<text x="1500" y="1379" class="label" text-anchor="end">DNA ERV / TE insertions</text>
+<text x="1500" y="1406" class="note" text-anchor="end">Separate from expression and peptides</text>
+<g transform="translate(0 210)">
 <path d="M70 1241H1530" stroke="#dbe2e7" stroke-width="1.5"/>
 <text x="70" y="1280" class="section" text-anchor="start">03  OPTIONAL PURITY / PLOIDY AND HLA-LOH</text>
 <path d="M100 1380 H850 Q900 1380 930 1405 L995 1460 Q1020 1485 1080 1485 H1500" class="track " stroke="#66504a"/>
@@ -135,4 +150,5 @@ text {font-family:Arial,Helvetica,sans-serif;fill:#20303d}
 <path d="M395 1580 H445" class="track pending" stroke="#9ba5af"/>
 <text x="465" y="1586" class="small" text-anchor="start">Unfinished downstream path</text>
 <text x="1530" y="1586" class="small" text-anchor="end">Implementation status does not imply biological validation.</text>
+</g>
 </svg>
