@@ -13,6 +13,8 @@ scripts; Nextflow submits every step as its own PBS job for you, but
 compute nodes having no external network means a one-time container
 pre-caching step is required first.
 
+[![NeoadjVax metromap: core, discovery and HLA-LOH workflows, with RNA input from any timepoint](assets/neoadjvax-pipeline-overview.svg)](assets/neoadjvax-pipeline-overview.svg)
+
 ## Quick start
 
 ```bash
@@ -42,7 +44,7 @@ images, HLA/pVACseq settings, per-branch on/off switches).
 | `run_pvacseq_core` | New RNA-support matching + pVACseq, default on |
 | `run_splicing_neoantigens` | New, default off — peptide step is a stub |
 | `run_fusion_neoantigens` | New, default off — STAR-Fusion + Arriba calling is real (`--fusion_callers`), AGFusion annotation downstream is still a stub |
-| `run_erv_neoantigens` | New, default off — peptide step is a stub |
+| `run_erv_neoantigens` | New, default off — ERV/TE quantification (own STAR pass + Telescope) is real, peptide step is a stub |
 | `run_purity_ploidy` | Fully ported from `Sequenza_tools`, default off — WGS/200bp bins only (WES errors at launch, see `docs/ARCHITECTURE.md`) |
 | `run_hla_loh` | Ported from [`NeoadjLOH`](https://github.com/JaydenBeckwith/NeoadjLOH), default off — independently runnable, see `assets/samplesheet_schema.md` |
 
@@ -96,3 +98,19 @@ annotation downstream of either caller is still a stub pending
 end-to-end on fusion calls yet — see `docs/ARCHITECTURE.md` for the full
 picture, including the Arriba reference-file (`--arriba_blacklist` etc.) and
 container-tag caveats.
+
+### ERV/transposable-element calling
+
+`--run_erv_neoantigens` quantifies endogenous retrovirus / transposable
+element expression with [Telescope](https://github.com/mlbendall/telescope),
+the tool most published HERV-in-cancer studies use for this. It runs its own
+dedicated STAR pass (relaxed multimapping — ERV loci are repetitive, so this
+can't reuse `RNA_VARIANT_CALLING`'s BAM, which discards multimappers) and an
+explicit `samtools collate` step before Telescope, which specifically
+requires collated rather than coordinate-sorted input. Point
+`--erv_annotation_gtf` at one of Telescope's own official GRCh38 builds from
+[`mlbendall/telescope_annotation_db`](https://github.com/mlbendall/telescope_annotation_db/tree/master/builds)
+(`retro.hg38.v1` is the recommended default). Quantification runs
+end-to-end; turning expressed ERV loci into candidate peptides
+(`ERV_TO_PEPTIDE`) is still an open design decision with two published
+approaches to choose between — see `docs/ARCHITECTURE.md`.

@@ -87,7 +87,10 @@ flowchart TB
     end
 
     subgraph ERV["erv_neoantigens.nf"]
-        e1["Telescope quantification"] --> e2["ERV→peptide — TODO,<br/>design decision open"]
+        e0["RNA FASTQ (direct or BAM→FASTQ)"] --> e1a["ERV_STAR_ALIGN<br/>(own STAR pass, relaxed multimap)"]
+        e1a --> e1b["samtools collate"]
+        e1b --> e1c["Telescope quantification"]
+        e1c --> e2["ERV→peptide — TODO,<br/>design decision open"]
     end
 
     subgraph PURITY["purity_ploidy.nf — --run_purity_ploidy (from Sequenza_tools)"]
@@ -176,6 +179,35 @@ choice it needed to make.
   are unset by default — Arriba runs without them (its own docs say so),
   just with more false-positive calls; fetch them via Arriba's own bundled
   `download_references.sh hg38+GENCODE46` before trusting real output.
+- **ERV calling, for real** (`modules/local/erv/erv_star_align.nf`,
+  `collate_bam.nf`, `telescope_quant.nf`) — researched tool choice rather
+  than just carrying forward the original stub's assumption: Telescope
+  confirmed as the right call over TEtranscripts/TElocal (family/locus-level
+  counts built for differential expression, not per-locus reassignment
+  confidence) and ERVmap (needs its own dedicated ERV-only reference/
+  alignment) by two independently published 2025/2026 HERV-in-cancer
+  studies both using Telescope on a standard STAR BAM. The branch now runs
+  its own dedicated `ERV_STAR_ALIGN` pass (`--outFilterMultimapNmax 100
+  --winAnchorMultimapNmax 100`, sourced from TEtranscripts' README and
+  STAR's own maintainer — resolves the old "ERV branch's alignment" open
+  decision) followed by an explicit `samtools collate` (Telescope rejects
+  coordinate-sorted input — its own docs say so directly) before
+  `telescope assign`. `--telescope_max_iter` defaults to 1000 (vs.
+  Telescope's own default of 100), matching a recently published
+  cutaneous-melanoma HERV profiling study doing the same STAR+Telescope
+  combination. `--erv_annotation_gtf` should point at one of Telescope's
+  own official builds (`mlbendall/telescope_annotation_db` —
+  `retro.hg38.v1` recommended default, `HERV_rmsk.hg38.v2` for broader
+  RepeatMasker-derived coverage) rather than an unspecified "RepeatMasker/
+  hervd" GTF as the old comment vaguely put it. Also caught this pass: the
+  Telescope container tag already in `nextflow.config`
+  (`1.0.3--py38h24c8ff8_1`) was simply wrong — confirmed 404 on
+  depot.galaxyproject.org — and has been fixed to `py38h8e05983_5`
+  (confirmed against bioconda's published build list and a partial-fetch
+  check, same methodology as Arriba's tag). What's still a stub, unchanged
+  by this pass: `ERV_TO_PEPTIDE` — see the "ERV → peptide" open decision
+  above, now with two cited published approaches to choose between instead
+  of just a hypothetical shape.
 - **`bin/match_rna_support.py`** + `modules/local/matching/rna_support_filter.nf`
   — the RNA-support check itself. Matches DNA/RNA calls by exact
   `(CHROM, POS, REF, ALT)`, optionally thresholding on RNA ALT-allele read
@@ -284,11 +316,19 @@ choice it needed to make.
    narrower toolchain) vs. custom ORF translation built on the
    IsoformSwitchAnalyzeR output `[[neoadjuvant-splicing]]` already
    produces. See `modules/local/splicing/splice_to_peptide.nf`.
-2. **ERV → peptide.** Same shape of problem, less prior art. Options:
-   treat expressed loci as novel ORFs (reuses pVACtools infrastructure,
-   hand-rolled and unvalidated scoring) vs. a dedicated published
-   TE-neoantigen scorer (more defensible, more work). See
-   `modules/local/erv/erv_to_peptide.nf`.
+2. **ERV → peptide.** Same shape of problem, less prior art — now backed by
+   two actual published approaches to pick between rather than just a
+   hypothetical shape (researched this pass): (a) six-frame ORF translation
+   of expressed Telescope loci above an expression threshold, in the style
+   of ObsERV's TPM>1 + MHC-I/II ligand scoring (Frontiers/npj Vaccines,
+   2025) — reuses this pipeline's own pVACtools/NetMHCpan setup, hand-rolled
+   and unvalidated scoring logic, less work; (b) a dedicated de novo
+   transcript-assembly pipeline in the style of TEProF2/Attig et al. (Nature
+   Genetics, 2023) — a real installable tool, more defensible, considerably
+   more infrastructure (Cufflinks/TopHat + CPC2/Pfam + mass-spec validation
+   in the original paper) and narrower in scope (TE-chimeric transcripts,
+   not any expressed ERV locus). See `modules/local/erv/erv_to_peptide.nf`
+   for the full writeup and citations.
 3. ~~**Fusion branch's FASTQ source.**~~ Resolved — `fusion_neoantigens.nf`
    now reuses `RNA_VARIANT_CALLING`'s own `BAM_TO_FASTQ` module for
    `rna_bam` samplesheet rows (alongside `rna_fastq_r1/r2` rows, used as-is),
@@ -297,10 +337,15 @@ choice it needed to make.
    isn't attempted — both callers' results are kept separate (tagged, in
    separate output subdirectories) rather than merged, since there's no
    settled logic for two callers disagreeing on the same event.
-4. **ERV branch's alignment.** Telescope wants multi-mapping reads that
-   `RNA_VARIANT_CALLING`'s `--outFilterMultimapNmax 2` (carried over from
-   your original script) discards — so it can't just reuse that BAM as-is.
-   Needs its own STAR pass with relaxed multimapping, not yet built.
+4. ~~**ERV branch's alignment.**~~ Resolved — `erv_neoantigens.nf` now runs
+   its own dedicated `ERV_STAR_ALIGN` pass (`--outFilterMultimapNmax 100
+   --winAnchorMultimapNmax 100`, sourced from TEtranscripts' own README and
+   STAR's maintainer, not guessed) rather than reusing
+   `RNA_VARIANT_CALLING`'s BAM, which discards exactly the multi-mapping
+   reads ERV/TE loci need at its `--outFilterMultimapNmax 2`. A
+   `samtools collate` step was also added ahead of Telescope, which
+   specifically rejects coordinate-sorted input — see
+   `modules/local/erv/erv_star_align.nf` / `collate_bam.nf`.
 5. **RNA_variant_pipeline.sh tail was truncated** in what got pasted in —
    it references `${bn}.braf_allelic_counts.tsv` in its cleanup step and a
    trailing "PIPELINE SUMMARY" / `COLLECTOREOF` heredoc that never actually
@@ -339,8 +384,9 @@ wrapping your actual `bin/merge-bin200-files.pl` /
 xHLA typing (class I + DRB1), SpliceAI-output filtering, gene fusion calling
 via STAR-Fusion and/or Arriba (`--fusion_callers`, both run in parallel by
 default, each with its own dedicated STAR pass — see `modules/local/fusion/`)
-+ pVACfuse (caller-aware, downstream of AGFusion), Telescope ERV
-quantification, the SpecHLA HLA-LOH branch (`modules/local/hla_loh/*.nf`,
++ pVACfuse (caller-aware, downstream of AGFusion), ERV/TE quantification via
+its own STAR pass + samtools collate + Telescope (`modules/local/erv/`),
+the SpecHLA HLA-LOH branch (`modules/local/hla_loh/*.nf`,
 ported from your `NeoadjLOH` repo), and the purity/ploidy branch's
 top-solution extraction (`sequenza_extract_top_solution.nf` — new code, not
 a port, see the caveat above).
@@ -366,9 +412,11 @@ command in that param block's comment before a real run.
    and do a dry run of just the core backbone
    (`--run_splicing_neoantigens false --run_fusion_neoantigens false
    --run_erv_neoantigens false`) before touching the new branches.
-3. Pick a direction on the three open peptide-generation decisions above —
-   those block real progress on splicing/fusion/ERV more than any missing
-   code does.
+3. Pick a direction on the two open peptide-generation decisions above
+   (splicing→peptide, ERV→peptide) — those block real end-to-end progress on
+   those two branches more than any missing code does. The fusion branch's
+   remaining gap (AGFusion) isn't a design decision, just a prerequisite not
+   yet done — see item 7 below.
 4. Confirm `--sequenza_conda_sh` / `--sequenza_conda_bin_fallback` point at
    wherever the `r_sequenza` conda env actually lives — the defaults are
    copied from a personal Gadi home directory (`/home/562/jb1592/...`) in
@@ -396,3 +444,10 @@ command in that param block's comment before a real run.
    AGFusion step downstream of both callers is still a stub pending
    `agfusion-build` against the GENCODE v46 GTF, so `pvacfuse` on fusion
    calls doesn't run end-to-end yet even though calling itself is real.
+8. Before trusting real ERV-calling output: download one of Telescope's
+   official annotation builds (`mlbendall/telescope_annotation_db` —
+   `retro.hg38.v1` recommended) and point `--erv_annotation_gtf` at it; do a
+   one-off `singularity pull` on the (now-corrected) Telescope container tag
+   to confirm it; and pick a direction on `ERV_TO_PEPTIDE` (item 2 above)
+   before expecting any peptide output from this branch — quantification
+   runs end-to-end, peptide generation still doesn't.

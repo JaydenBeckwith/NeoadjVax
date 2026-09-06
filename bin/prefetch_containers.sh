@@ -42,7 +42,10 @@ declare -A IMAGES=(
     ["docker://griffithlab/pvactools:latest"]="griffithlab-pvactools-latest.img"
     ["https://depot.galaxyproject.org/singularity/star-fusion:1.13.0--hdfd78af_2"]="depot.galaxyproject.org-singularity-star-fusion-1.13.0--hdfd78af_2.img"
     ["https://depot.galaxyproject.org/singularity/arriba:2.5.1--h87b9561_0"]="depot.galaxyproject.org-singularity-arriba-2.5.1--h87b9561_0.img"
-    ["https://depot.galaxyproject.org/singularity/telescope:1.0.3--py38h24c8ff8_1"]="depot.galaxyproject.org-singularity-telescope-1.0.3--py38h24c8ff8_1.img"
+    # Was py38h24c8ff8_1 — confirmed 404 on depot.galaxyproject.org this
+    # pass (see nextflow.config's containers{} comment); fixed to a build
+    # confirmed to actually exist there.
+    ["https://depot.galaxyproject.org/singularity/telescope:1.0.3--py38h8e05983_5"]="depot.galaxyproject.org-singularity-telescope-1.0.3--py38h8e05983_5.img"
     ["docker://humanlongevity/hla:0.0.0"]="humanlongevity-hla-0.0.0.img"
 )
 

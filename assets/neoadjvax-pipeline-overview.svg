@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600" viewBox="0 0 1600 1600" role="img" aria-labelledby="title desc">
+<title id="title">NeoadjVax workflow map</title>
+<desc id="desc">Metromap of eight Nextflow branches. DNA and RNA variant calling feed RNA-support filtering, VEP and pVACseq, with HLA alleles supplied separately. RNA can be from any timepoint. Optional fusion, splicing and ERV routes have unfinished downstream stages. Sequenza purity and ploidy can feed SpecHLA HLA-LOH analysis. Repeated input stations denote the same input types, not dependencies between lanes.</desc>
+<style>
+text {font-family:Arial,Helvetica,sans-serif;fill:#20303d}
+.title {font-size:38px;font-weight:700}
+.subtitle {font-size:20px;fill:#566774}
+.section {font-size:18px;font-weight:700;letter-spacing:1.5px}
+.label {font-size:22px;font-weight:600}
+.note {font-size:18px;fill:#566774}
+.small {font-size:17px;fill:#566774}
+.todo {font-size:17px;fill:#8b5143}
+.track {fill:none;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+.station {fill:white;stroke:#20303d;stroke-width:3}
+.pending {stroke-dasharray:10 12}
+</style>
+<rect width="1600" height="1600" fill="white"/>
+<text x="70" y="65" class="title" text-anchor="start">NeoadjVax workflow map</text>
+<text x="70" y="101" class="subtitle" text-anchor="start">Nextflow DSL2 / melanoma neoantigen discovery</text>
+<text x="1530" y="65" class="small" text-anchor="end">READ LEFT TO RIGHT</text>
+<text x="1530" y="96" class="subtitle" text-anchor="end">RNA-seq from any timepoint</text>
+<path d="M70 130H1530" stroke="#dbe2e7" stroke-width="1.5"/>
+<text x="70" y="164" class="section" text-anchor="start">01  CORE SOMATIC NEOANTIGENS</text>
+<path d="M940 235 H1175 Q1250 235 1250 310 V370" class="track " stroke="#279f9c"/>
+<path d="M933 225h10l9 10-9 10h-10z" fill="#20303d"/>
+<circle cx="1070" cy="235" r="11" class="station"/>
+<text x="1070" y="174" class="label" text-anchor="middle">xHLA / HLA alleles</text>
+<text x="1070" y="202" class="note" text-anchor="middle">Normal DNA or supplied alleles</text>
+<path d="M100 300 H590 Q630 300 655 325 L680 350 Q700 370 740 370 H1500" class="track " stroke="#249f64"/>
+<path d="M100 470 H590 Q630 470 655 445 L710 390 Q730 370 770 370" class="track " stroke="#3985e8"/>
+<text x="205" y="239" class="label" text-anchor="middle">Tumour + normal DNA</text>
+<text x="205" y="267" class="note" text-anchor="middle">FASTQ / BAM / VCF</text>
+<path d="M93 290h10l9 10-9 10h-10z" fill="#20303d"/>
+<circle cx="500" cy="300" r="11" class="station"/>
+<text x="500" y="239" class="label" text-anchor="middle">DNA calling</text>
+<text x="500" y="267" class="note" text-anchor="middle">BWA / Mutect2</text>
+<text x="205" y="409" class="label" text-anchor="middle">RNA-seq input</text>
+<text x="205" y="437" class="note" text-anchor="middle">Any timepoint / FASTQ, BAM or VCF</text>
+<path d="M93 460h10l9 10-9 10h-10z" fill="#20303d"/>
+<circle cx="500" cy="470" r="11" class="station"/>
+<text x="500" y="409" class="label" text-anchor="middle">RNA calling</text>
+<text x="500" y="437" class="note" text-anchor="middle">STAR / GATK</text>
+<circle cx="780" cy="370" r="11" class="station"/>
+<text x="780" y="309" class="label" text-anchor="middle">RNA support</text>
+<text x="780" y="337" class="note" text-anchor="middle">DNA / RNA allele match</text>
+<circle cx="1000" cy="370" r="11" class="station"/>
+<text x="1000" y="411" class="label" text-anchor="middle">VEP annotation</text>
+<text x="1000" y="439" class="note" text-anchor="middle">Supported variants</text>
+<circle cx="1250" cy="370" r="11" class="station"/>
+<text x="1250" y="411" class="label" text-anchor="middle">pVACseq</text>
+<text x="1250" y="439" class="note" text-anchor="middle">Candidate prediction</text>
+<path d="M1500 357v26" stroke="#20303d" stroke-width="6"/>
+<text x="1500" y="280" class="label" text-anchor="end">Somatic candidates</text>
+<text x="1500" y="308" class="note" text-anchor="end">Per patient</text>
+<text x="1500" y="336" class="note" text-anchor="end">and RNA timepoint</text>
+<text x="70" y="525" class="small" text-anchor="start">Called VCFs enter at the relevant calling output; HLA typing is skipped when alleles are supplied.</text>
+<path d="M70 551H1530" stroke="#dbe2e7" stroke-width="1.5"/>
+<text x="70" y="590" class="section" text-anchor="start">02  OPTIONAL DISCOVERY ROUTES</text>
+<path d="M100 715 H360 Q390 715 410 695 L420 685 Q440 665 470 665 H665 Q695 665 715 685 L725 695 Q745 715 775 715 H810" class="track " stroke="#ec8950"/>
+<path d="M360 715 Q390 715 410 735 L420 745 Q440 765 470 765 H665 Q695 765 715 745 L725 735 Q745 715 775 715" class="track " stroke="#ec8950"/>
+<path d="M810 715 H1500" class="track pending" stroke="#9ba5af"/>
+<text x="205" y="654" class="label" text-anchor="middle">RNA FASTQ / BAM</text>
+<text x="205" y="682" class="note" text-anchor="middle">Any timepoint</text>
+<path d="M93 705h10l9 10-9 10h-10z" fill="#20303d"/>
+<circle cx="560" cy="665" r="11" class="station"/>
+<text x="560" y="635" class="label" text-anchor="middle">STAR-Fusion</text>
+<circle cx="560" cy="765" r="11" class="station"/>
+<text x="560" y="805" class="label" text-anchor="middle">Arriba</text>
+<circle cx="920" cy="715" r="11" class="station" stroke-dasharray="4 3"/>
+<text x="920" y="654" class="label" text-anchor="middle">AGFusion</text>
+<text x="920" y="682" class="todo" text-anchor="middle">TODO: annotation</text>
+<circle cx="1220" cy="715" r="11" class="station"/>
+<text x="1220" y="654" class="label" text-anchor="middle">pVACfuse</text>
+<text x="1220" y="682" class="todo" text-anchor="middle">Awaiting AGFusion output</text>
+<path d="M1500 702v26" stroke="#20303d" stroke-width="6"/>
+<text x="1500" y="754" class="label" text-anchor="end">Fusion candidates</text>
+<text x="1500" y="781" class="todo" text-anchor="end">Downstream steps unfinished</text>
+<text x="560" y="835" class="small" text-anchor="middle">Each caller uses its own alignment</text>
+<text x="920" y="805" class="small" text-anchor="middle">Caller outputs kept separate</text>
+<path d="M100 950 H650" class="track " stroke="#bd60ce"/>
+<path d="M650 950 H1500" class="track pending" stroke="#9ba5af"/>
+<text x="205" y="889" class="label" text-anchor="middle">SpliceAI VCF</text>
+<text x="205" y="917" class="note" text-anchor="middle">Existing annotated output</text>
+<path d="M93 940h10l9 10-9 10h-10z" fill="#20303d"/>
+<circle cx="560" cy="950" r="11" class="station"/>
+<text x="560" y="889" class="label" text-anchor="middle">Splice-score filter</text>
+<text x="560" y="917" class="note" text-anchor="middle">Delta-score threshold</text>
+<circle cx="1000" cy="950" r="11" class="station" stroke-dasharray="4 3"/>
+<text x="1000" y="889" class="label" text-anchor="middle">Splice to peptide</text>
+<text x="1000" y="917" class="todo" text-anchor="middle">TODO: peptide generation</text>
+<path d="M1500 937v26" stroke="#20303d" stroke-width="6"/>
+<text x="1500" y="989" class="label" text-anchor="end">Splicing peptides</text>
+<text x="1500" y="1016" class="todo" text-anchor="end">Planned output</text>
+<path d="M100 1145 H980" class="track " stroke="#c6a32d"/>
+<path d="M980 1145 H1500" class="track pending" stroke="#9ba5af"/>
+<text x="205" y="1084" class="label" text-anchor="middle">RNA FASTQ / BAM</text>
+<text x="205" y="1112" class="note" text-anchor="middle">Any timepoint</text>
+<path d="M93 1135h10l9 10-9 10h-10z" fill="#20303d"/>
+<circle cx="510" cy="1145" r="11" class="station"/>
+<text x="510" y="1084" class="label" text-anchor="middle">STAR + collate</text>
+<text x="510" y="1112" class="note" text-anchor="middle">Multimapping retained</text>
+<circle cx="850" cy="1145" r="11" class="station"/>
+<text x="850" y="1084" class="label" text-anchor="middle">Telescope</text>
+<text x="850" y="1112" class="note" text-anchor="middle">ERV / TE quantification</text>
+<circle cx="1220" cy="1145" r="11" class="station" stroke-dasharray="4 3"/>
+<text x="1220" y="1084" class="label" text-anchor="middle">ERV to peptide</text>
+<text x="1220" y="1112" class="todo" text-anchor="middle">TODO: peptide generation</text>
+<path d="M1500 1132v26" stroke="#20303d" stroke-width="6"/>
+<text x="1500" y="1184" class="label" text-anchor="end">ERV peptides</text>
+<text x="1500" y="1211" class="todo" text-anchor="end">Planned output</text>
+<path d="M70 1241H1530" stroke="#dbe2e7" stroke-width="1.5"/>
+<text x="70" y="1280" class="section" text-anchor="start">03  OPTIONAL PURITY / PLOIDY AND HLA-LOH</text>
+<path d="M100 1380 H850 Q900 1380 930 1405 L995 1460 Q1020 1485 1080 1485 H1500" class="track " stroke="#66504a"/>
+<path d="M100 1485 H1080" class="track " stroke="#66504a"/>
+<text x="205" y="1319" class="label" text-anchor="middle">Tumour + normal BAMs</text>
+<text x="205" y="1347" class="note" text-anchor="middle">WGS</text>
+<path d="M93 1370h10l9 10-9 10h-10z" fill="#20303d"/>
+<circle cx="590" cy="1380" r="11" class="station"/>
+<text x="590" y="1319" class="label" text-anchor="middle">Sequenza</text>
+<text x="590" y="1347" class="note" text-anchor="middle">Purity + ploidy</text>
+<text x="855" y="1337" class="small" text-anchor="middle">Or supplied purity / ploidy</text>
+<path d="M93 1475h10l9 10-9 10h-10z" fill="#20303d"/>
+<text x="205" y="1450" class="label" text-anchor="middle">Tumour BAM</text>
+<circle cx="590" cy="1485" r="11" class="station"/>
+<text x="590" y="1424" class="label" text-anchor="middle">SpecHLA</text>
+<text x="590" y="1452" class="note" text-anchor="middle">Extract + type tumour HLA</text>
+<circle cx="1180" cy="1485" r="11" class="station"/>
+<text x="1180" y="1424" class="label" text-anchor="middle">HLA-LOH calling</text>
+<text x="1180" y="1452" class="note" text-anchor="middle">Tumour typing + purity / ploidy</text>
+<path d="M1500 1472v26" stroke="#20303d" stroke-width="6"/>
+<text x="1500" y="1524" class="label" text-anchor="end">HLA-LOH calls</text>
+<path d="M70 1546H1530" stroke="#dbe2e7" stroke-width="1.5"/>
+<path d="M80 1580 H130" class="track " stroke="#249f64"/>
+<text x="150" y="1586" class="small" text-anchor="start">Implemented stage</text>
+<path d="M395 1580 H445" class="track pending" stroke="#9ba5af"/>
+<text x="465" y="1586" class="small" text-anchor="start">Unfinished downstream path</text>
+<text x="1530" y="1586" class="small" text-anchor="end">Implementation status does not imply biological validation.</text>
+</svg>

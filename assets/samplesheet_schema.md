@@ -109,6 +109,13 @@ rows are not usable for fusion calling (there's no variant file fusion
 callers can start from) — a row with only `rna_vcf` set contributes to
 `PVACSEQ_CORE` but is skipped by the fusion branch.
 
+Same story again for `--run_erv_neoantigens` (`workflows/erv_neoantigens.nf`):
+`rna_bam` (via `BAM_TO_FASTQ`) and `rna_fastq_r1`/`rna_fastq_r2` rows both
+work, each realigned through the branch's own dedicated STAR pass (relaxed
+multimapping, so ERV/TE loci's characteristically multi-mapping reads
+survive) rather than reusing `RNA_VARIANT_CALLING`'s BAM. `rna_vcf`-only
+rows are skipped here too, same reasoning as the fusion branch.
+
 ## How they're joined for `PVACSEQ_CORE`
 
 For each RNA row, the pipeline looks up that `patient_id`'s DNA filtered

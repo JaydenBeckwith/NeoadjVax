@@ -162,7 +162,13 @@ workflow {
         dna_samplesheet_ch = Channel.fromPath(params.dna_samplesheet).splitCsv(header: true)
     }
 
-    if (params.run_rna_variant_calling || params.run_pvacseq_core) {
+    // Every RNA-derived branch consumes the longitudinal samplesheet, even
+    // when it runs independently of RNA variant calling.  In particular,
+    // `--pipelines gene_fusion` and `--pipelines erv` must not silently
+    // receive an empty input channel.
+    if (params.run_rna_variant_calling || params.run_pvacseq_core ||
+        params.run_splicing_neoantigens || params.run_fusion_neoantigens ||
+        params.run_erv_neoantigens) {
         if (!params.rna_samplesheet) error "Please provide --rna_samplesheet (see assets/samplesheet_schema.md)"
         validateRnaSamplesheet(params.rna_samplesheet)
         rna_samplesheet_ch = Channel.fromPath(params.rna_samplesheet).splitCsv(header: true)
