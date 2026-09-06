@@ -99,6 +99,16 @@ per-row way to skip alignment+calling entirely for a specific timepoint.
 `main.nf`'s `validateRnaSamplesheet()` checks all of this at launch, same
 as the DNA side.
 
+This same `--rna_samplesheet` also feeds `--run_fusion_neoantigens`
+(`workflows/fusion_neoantigens.nf`): both `rna_bam` and `rna_fastq_r1`/
+`rna_fastq_r2` rows work as input there — `rna_bam` rows go through their
+own BAM→FASTQ step (reusing the `BAM_TO_FASTQ` module above) before being
+handed to STAR-Fusion/Arriba, each of which then does its own dedicated STAR
+alignment pass rather than reusing `RNA_VARIANT_CALLING`'s BAM. `rna_vcf`
+rows are not usable for fusion calling (there's no variant file fusion
+callers can start from) — a row with only `rna_vcf` set contributes to
+`PVACSEQ_CORE` but is skipped by the fusion branch.
+
 ## How they're joined for `PVACSEQ_CORE`
 
 For each RNA row, the pipeline looks up that `patient_id`'s DNA filtered

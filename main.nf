@@ -20,6 +20,72 @@
 nextflow.enable.dsl = 2
 
 // ---------------------------------------------------------------------
+// Pipeline selection (--pipelines) — a friendlier alternative to setting
+// each --run_* flag individually. Maps a comma-separated list of names
+// (case/spacing-insensitive: "geneFusion", "gene-fusion", "Gene Fusion"
+// and "gene_fusion" all resolve to the same entry) onto the underlying
+// run_* flags. Some names turn on more than one flag together —
+// "somatic_neoantigen" needs DNA calling + RNA calling + pVACseq core all
+// three, since the core neoantigen score is DNA calls filtered for RNA
+// support (see PVACSEQ_CORE below), not any one of those alone.
+//
+// When --pipelines is set, it's authoritative for every run_* flag —
+// unlisted branches are turned OFF even if their individual --run_*
+// default is true. Leave --pipelines unset to keep the old behaviour
+// (each --run_* flag controls its own branch, independently).
+// ---------------------------------------------------------------------
+def applyPipelineSelection(String pipelinesParam) {
+    // key: normalized name (lowercase, punctuation/spaces stripped) ->
+    // the run_* flags it turns on. Some names turn on more than one flag
+    // together — "somatic_neoantigen" needs DNA calling + RNA calling +
+    // pVACseq core all three, since the core neoantigen score is DNA
+    // calls filtered for RNA support (see PVACSEQ_CORE below), not any
+    // one of those alone.
+    def registry = [
+        'dnavariantcalling'  : ['run_dna_variant_calling'],
+        'rnavariantcalling'  : ['run_rna_variant_calling'],
+        'somaticneoantigen'  : ['run_dna_variant_calling', 'run_rna_variant_calling', 'run_pvacseq_core'],
+        'coreneoantigen'     : ['run_dna_variant_calling', 'run_rna_variant_calling', 'run_pvacseq_core'],
+        'pvacseqcore'        : ['run_dna_variant_calling', 'run_rna_variant_calling', 'run_pvacseq_core'],
+        'splicingneoantigen' : ['run_splicing_neoantigens'],
+        'splicing'           : ['run_splicing_neoantigens'],
+        'genefusion'         : ['run_fusion_neoantigens'],
+        'fusion'             : ['run_fusion_neoantigens'],
+        'fusionneoantigen'   : ['run_fusion_neoantigens'],
+        'ervneoantigen'      : ['run_erv_neoantigens'],
+        'erv'                : ['run_erv_neoantigens'],
+        'purityploidy'       : ['run_purity_ploidy'],
+        'sequenza'           : ['run_purity_ploidy'],
+        'hlaloh'             : ['run_hla_loh'],
+        'loh'                : ['run_hla_loh'],
+    ]
+    def allFlags = [
+        'run_dna_variant_calling', 'run_rna_variant_calling', 'run_pvacseq_core',
+        'run_splicing_neoantigens', 'run_fusion_neoantigens', 'run_erv_neoantigens',
+        'run_purity_ploidy', 'run_hla_loh',
+    ]
+    def normalize = { String s -> s.toLowerCase().replaceAll(/[^a-z0-9]/, '') }
+
+    def requested = pipelinesParam.split(',').collect { it.trim() }.findAll { it }
+    def flagsToEnable = [] as Set
+    def unknown = []
+    requested.each { name ->
+        def key = normalize(name)
+        if (registry.containsKey(key)) {
+            flagsToEnable.addAll(registry[key])
+        } else {
+            unknown << name
+        }
+    }
+    if (unknown) {
+        def validNames = registry.keySet().sort().join(', ')
+        error "--pipelines: unrecognized name(s) ${unknown} — valid names (case/spacing/punctuation-insensitive): ${validNames}. Comma-separate to run more than one, e.g. --pipelines somatic_neoantigen,gene_fusion"
+    }
+    allFlags.each { flag -> params[flag] = flagsToEnable.contains(flag) }
+    log.info "--pipelines '${pipelinesParam}' resolved to: ${allFlags.findAll { params[it] }.sort()}"
+}
+
+// ---------------------------------------------------------------------
 // Samplesheet validation — runs synchronously at launch (splitCsv() on a
 // plain `file()` reads it eagerly, not as a reactive Channel) so a missing
 // or inconsistent row fails immediately with a clear message instead of
@@ -83,6 +149,10 @@ include { HLA_LOH }              from './workflows/hla_loh'
 
 workflow {
 
+    if (params.pipelines) {
+        applyPipelineSelection(params.pipelines)
+    }
+
     dna_samplesheet_ch = Channel.empty()
     rna_samplesheet_ch = Channel.empty()
 
@@ -136,10 +206,8 @@ workflow {
 
     // ---------------------------------------------------------------
     // Tumor purity/ploidy (Sequenza) — optional, --run_purity_ploidy.
-    // STUB: real code pending https://github.com/JaydenBeckwith/Sequenza_tools
-    // (currently inaccessible from the build environment — see
-    // workflows/purity_ploidy.nf). Wired here so the branch is ready to
-    // flip on once that's replaced with real logic.
+    // Fully ported from https://github.com/JaydenBeckwith/Sequenza_tools —
+    // WGS/200bp bins only, see workflows/purity_ploidy.nf.
     // ---------------------------------------------------------------
     purity_ploidy_ch = Channel.empty()
     if (params.run_purity_ploidy) {

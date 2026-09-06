@@ -1,9 +1,10 @@
-// New — gene fusion detection. STAR-Fusion chosen over Arriba because it
-// reuses the same STAR aligner already standing up the RNA branch (one
-// aligner across the pipeline instead of two), at the cost of needing a
-// CTAT genome resource lib (params.ctat_resource_lib) alongside the
-// existing GRCh38/GENCODE reference. Runs on the same FASTQs the RNA
-// variant-calling branch already produces from BAM (or takes directly).
+// Gene fusion detection, caller 1 of 2 (run alongside Arriba — see
+// arriba_align.nf/arriba.nf — rather than instead of it, per
+// --fusion_callers). STAR-Fusion needs its own CTAT genome resource lib
+// (params.ctat_resource_lib), separate from this pipeline's own
+// GRCh38/GENCODE STAR index/genome_fasta/gtf that Arriba's STAR pass
+// reuses — the two tools' STAR runs are NOT shared, each needs its own
+// aligner invocation tuned to what it detects fusions from.
 
 process STAR_FUSION {
     tag "${meta.id}:${meta.timepoint}"
@@ -16,7 +17,7 @@ process STAR_FUSION {
     path ctat_resource_lib
 
     output:
-    tuple val(meta), path("star_fusion_out/star-fusion.fusion_predictions.abridged.tsv"), emit: fusions
+    tuple val(meta), val('starfusion'), path("star_fusion_out/star-fusion.fusion_predictions.abridged.tsv"), emit: fusions
     path "star_fusion_out/*", emit: all
 
     script:

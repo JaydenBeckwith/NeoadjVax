@@ -78,9 +78,12 @@ flowchart TB
         s2 --> s3["Splice→peptide — TODO"]
     end
 
-    subgraph FUSION["fusion_neoantigens.nf"]
-        f1["STAR-Fusion"] --> f2["AGFusion annotate — TODO"]
-        f2 --> f3["pVACfuse"]
+    subgraph FUSION["fusion_neoantigens.nf — --fusion_callers"]
+        f0["RNA FASTQ (direct or BAM→FASTQ)"] --> f1a["STAR-Fusion<br/>(own STAR pass, CTAT lib)"]
+        f0 --> f1b["Arriba<br/>(own STAR pass, relaxed multimap)"]
+        f1a --> f2["AGFusion annotate — TODO,<br/>per caller"]
+        f1b --> f2
+        f2 --> f3["pVACfuse, per caller"]
     end
 
     subgraph ERV["erv_neoantigens.nf"]
@@ -131,6 +134,48 @@ choice it needed to make.
 
 ## New code that didn't exist in either script
 
+- **Pipeline selection (`--pipelines`)** (`main.nf`'s `applyPipelineSelection()`)
+  — a friendlier alternative to setting each `--run_*` flag individually.
+  `--pipelines "somatic_neoantigen,gene_fusion"` (comma-separated,
+  case/spacing/punctuation-insensitive — "geneFusion", "gene-fusion",
+  "Gene Fusion" all match) resolves to the underlying flags via a small
+  registry and is **authoritative** when set: every branch not named gets
+  turned off, even ones whose individual `--run_*` default is `true`. Some
+  names turn on more than one flag together — `somatic_neoantigen` needs
+  `run_dna_variant_calling` + `run_rna_variant_calling` +
+  `run_pvacseq_core` all three, matching the existing constraint that
+  `PVACSEQ_CORE` can't run alone (see `main.nf`'s existing error for that).
+  Leave `--pipelines` unset to keep controlling each branch with its own
+  flag, exactly as before — nothing changes for existing invocations. See
+  `README.md` for the full name table.
+- **Gene fusion calling, for real** (`modules/local/fusion/star_fusion.nf`,
+  `arriba_align.nf`, `arriba.nf`) — `--fusion_callers` (default
+  `starfusion,arriba`, comma-separated) runs either or both in parallel per
+  patient-timepoint, each tagged through the rest of the branch so results
+  don't collide. STAR-Fusion and Arriba each run their **own** STAR pass —
+  they're not sharing one alignment, and neither reuses
+  `RNA_VARIANT_CALLING`'s BAM: STAR-Fusion's wrapper needs the CTAT genome
+  lib's own bundled index, and Arriba needs relaxed multimapping
+  (`--outFilterMultimapNmax 50`) plus a specific set of chimeric-alignment
+  flags copied verbatim from Arriba's own documented quickstart — both
+  incompatible with the RNA branch's `--outFilterMultimapNmax 2` two-pass
+  settings. This also resolves the old "fusion branch's FASTQ source" open
+  decision: the branch now consumes `rna_bam` samplesheet rows too (via
+  `RNA_VARIANT_CALLING`'s own `BAM_TO_FASTQ` module, reused rather than
+  duplicated), not just `rna_fastq_r1/r2`. What's still a stub: AGFusion
+  annotation downstream of either caller (needs `agfusion-build` run
+  against our GENCODE v46 GTF first — a real prerequisite, not done yet),
+  so `pvacfuse` can't actually run on fusion calls end-to-end today even
+  though the calling step itself is real. Also worth a look: the Arriba
+  container tag (`2.5.1--h87b9561_0`) was confirmed via bioconda's build
+  string and a partial-fetch check against the depot mirror rather than a
+  full browser-verified pull — high confidence, worth a one-off
+  `singularity pull` sanity check before relying on it in production. And
+  Arriba's blacklist/known-fusions/protein-domains reference files
+  (`--arriba_blacklist`/`--arriba_known_fusions`/`--arriba_protein_domains`)
+  are unset by default — Arriba runs without them (its own docs say so),
+  just with more false-positive calls; fetch them via Arriba's own bundled
+  `download_references.sh hg38+GENCODE46` before trusting real output.
 - **`bin/match_rna_support.py`** + `modules/local/matching/rna_support_filter.nf`
   — the RNA-support check itself. Matches DNA/RNA calls by exact
   `(CHROM, POS, REF, ALT)`, optionally thresholding on RNA ALT-allele read
@@ -244,10 +289,14 @@ choice it needed to make.
    hand-rolled and unvalidated scoring) vs. a dedicated published
    TE-neoantigen scorer (more defensible, more work). See
    `modules/local/erv/erv_to_peptide.nf`.
-3. **Fusion branch's FASTQ source.** `fusion_neoantigens.nf` currently only
-   reads `rna_fastq_r1/r2` from the samplesheet; most rows will only have
-   `rna_bam` per the schema. Needs either its own BAM→FASTQ step or to
-   share `RNA_VARIANT_CALLING`'s output — not decided yet.
+3. ~~**Fusion branch's FASTQ source.**~~ Resolved — `fusion_neoantigens.nf`
+   now reuses `RNA_VARIANT_CALLING`'s own `BAM_TO_FASTQ` module for
+   `rna_bam` samplesheet rows (alongside `rna_fastq_r1/r2` rows, used as-is),
+   so both samplesheet shapes work. What's still genuinely open in that
+   branch: reconciling STAR-Fusion's and Arriba's fusion calls into one set
+   isn't attempted — both callers' results are kept separate (tagged, in
+   separate output subdirectories) rather than merged, since there's no
+   settled logic for two callers disagreeing on the same event.
 4. **ERV branch's alignment.** Telescope wants multi-mapping reads that
    `RNA_VARIANT_CALLING`'s `--outFilterMultimapNmax 2` (carried over from
    your original script) discards — so it can't just reuse that BAM as-is.
@@ -287,12 +336,14 @@ wrapping your actual `bin/merge-bin200-files.pl` /
 `bin/merge-header-bin200.pl` / `bin/run-sequenza.R`, WGS/200bp-bins only).
 
 **New but complete modules**, not yet run against real data:
-xHLA typing (class I + DRB1), SpliceAI-output filtering, STAR-Fusion +
-pVACfuse, Telescope ERV quantification, the SpecHLA HLA-LOH branch
-(`modules/local/hla_loh/*.nf`, ported from your `NeoadjLOH` repo), and the
-purity/ploidy branch's top-solution extraction
-(`sequenza_extract_top_solution.nf` — new code, not a port, see the
-caveat above).
+xHLA typing (class I + DRB1), SpliceAI-output filtering, gene fusion calling
+via STAR-Fusion and/or Arriba (`--fusion_callers`, both run in parallel by
+default, each with its own dedicated STAR pass — see `modules/local/fusion/`)
++ pVACfuse (caller-aware, downstream of AGFusion), Telescope ERV
+quantification, the SpecHLA HLA-LOH branch (`modules/local/hla_loh/*.nf`,
+ported from your `NeoadjLOH` repo), and the purity/ploidy branch's
+top-solution extraction (`sequenza_extract_top_solution.nf` — new code, not
+a port, see the caveat above).
 
 **Explicit TODO stubs** (exit 1, comment explains the decision needed):
 splice→peptide, ERV→peptide, AGFusion annotation.
@@ -332,3 +383,16 @@ command in that param block's comment before a real run.
    "top solution" pick hasn't been checked against a real
    `run-sequenza.R` run yet — compare its output to
    `<sample>_alternative_solutions.txt` by eye the first time.
+6. Try out `--pipelines` on a real invocation (e.g.
+   `--pipelines somatic_neoantigen,gene_fusion`) to confirm the friendly
+   names resolve the way you expect before relying on it for a full run —
+   see `README.md` for the full name table.
+7. Before trusting real fusion-calling output: run Arriba's own
+   `download_references.sh hg38+GENCODE46` and set
+   `--arriba_blacklist`/`--arriba_known_fusions`/`--arriba_protein_domains`
+   (Arriba runs without them, just with more false positives per its own
+   docs); do a one-off `singularity pull` on the Arriba container tag to
+   confirm it (see `nextflow.config`'s comment on it); and note the
+   AGFusion step downstream of both callers is still a stub pending
+   `agfusion-build` against the GENCODE v46 GTF, so `pvacfuse` on fusion
+   calls doesn't run end-to-end yet even though calling itself is real.

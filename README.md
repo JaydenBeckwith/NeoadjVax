@@ -41,7 +41,7 @@ images, HLA/pVACseq settings, per-branch on/off switches).
 | `run_rna_variant_calling` | Ported from the original RNA PBS script, default on |
 | `run_pvacseq_core` | New RNA-support matching + pVACseq, default on |
 | `run_splicing_neoantigens` | New, default off — peptide step is a stub |
-| `run_fusion_neoantigens` | New, default off — annotation step is a stub |
+| `run_fusion_neoantigens` | New, default off — STAR-Fusion + Arriba calling is real (`--fusion_callers`), AGFusion annotation downstream is still a stub |
 | `run_erv_neoantigens` | New, default off — peptide step is a stub |
 | `run_purity_ploidy` | Fully ported from `Sequenza_tools`, default off — WGS/200bp bins only (WES errors at launch, see `docs/ARCHITECTURE.md`) |
 | `run_hla_loh` | Ported from [`NeoadjLOH`](https://github.com/JaydenBeckwith/NeoadjLOH), default off — independently runnable, see `assets/samplesheet_schema.md` |
@@ -50,3 +50,49 @@ images, HLA/pVACseq settings, per-branch on/off switches).
 turned on — `run_hla_loh` can run entirely standalone via
 `--hla_loh_samplesheet`, or chained off `--run_dna_variant_calling` with
 purity/ploidy from `--purity_ploidy_csv`.
+
+### Picking branches with `--pipelines`
+
+Instead of setting each `--run_*` flag yourself, `--pipelines` takes a
+comma-separated list of friendly names and turns on exactly the flags those
+names need (and turns everything else off — it's authoritative once set).
+Matching is case/spacing/punctuation-insensitive, so `geneFusion`,
+`gene-fusion`, `Gene Fusion` and `gene_fusion` all resolve to the same entry.
+
+```bash
+# just gene fusion calling
+nextflow run main.nf -profile gadi --pipelines gene_fusion ...
+
+# the core DNA+RNA neoantigen pipeline plus fusion calling
+nextflow run main.nf -profile gadi --pipelines somatic_neoantigen,gene_fusion ...
+```
+
+| Name(s) | Turns on |
+|---|---|
+| `dna_variant_calling` | `run_dna_variant_calling` |
+| `rna_variant_calling` | `run_rna_variant_calling` |
+| `somatic_neoantigen`, `core_neoantigen`, `pvacseq_core` | `run_dna_variant_calling` + `run_rna_variant_calling` + `run_pvacseq_core` (pVACseq core needs both — see `docs/ARCHITECTURE.md`) |
+| `splicing`, `splicing_neoantigen` | `run_splicing_neoantigens` |
+| `fusion`, `gene_fusion`, `fusion_neoantigen` | `run_fusion_neoantigens` |
+| `erv`, `erv_neoantigen` | `run_erv_neoantigens` |
+| `purity_ploidy`, `sequenza` | `run_purity_ploidy` |
+| `hla_loh`, `loh` | `run_hla_loh` |
+
+Leave `--pipelines` unset to keep controlling each branch with its own
+`--run_*` flag, exactly as before — nothing changes for existing invocations.
+
+### Gene fusion calling
+
+`--run_fusion_neoantigens` runs the caller(s) named in `--fusion_callers`
+(default `starfusion,arriba`, comma-separated) in parallel per
+patient-timepoint. Each caller runs its own dedicated STAR alignment pass —
+STAR-Fusion needs its own CTAT genome resource lib (`--ctat_resource_lib`),
+Arriba needs relaxed multimapping plus chimeric-alignment flags — and their
+results are kept separate all the way through rather than merged, tagged and
+published to per-caller subdirectories. The samplesheet's `rna_bam` or
+`rna_fastq_r1`/`rna_fastq_r2` columns both work as input. AGFusion
+annotation downstream of either caller is still a stub pending
+`agfusion-build` against the reference GTF, so `pvacfuse` can't run
+end-to-end on fusion calls yet — see `docs/ARCHITECTURE.md` for the full
+picture, including the Arriba reference-file (`--arriba_blacklist` etc.) and
+container-tag caveats.
