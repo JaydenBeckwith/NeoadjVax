@@ -1,6 +1,6 @@
 // Ported from: DNA pVACseq script -> run_mutect2()
 // Original called Mutect2 with literal -tumor/-normal sample names "tumor"/
-// "normal" (matching the RGSM values it set) — kept the same convention.
+// "normal" (matching the RGSM values it set): kept the same convention.
 
 process MUTECT2 {
     tag "${meta.id}"

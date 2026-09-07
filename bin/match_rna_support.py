@@ -8,7 +8,7 @@ per-patient neoantigen score design in [[neoantigen-score]]:
     to see how many carry over. That RNA-supported VCF subset then run
     through pVACseq."
 
-This is new code — it did not exist in either of Jayden's original scripts
+This is new code: it did not exist in either of Jayden's original scripts
 (the DNA script went straight from Mutect2 to VEP/pVACseq; the RNA script
 stopped at its own filtered.vcf and never fed back into the DNA calls).
 
@@ -43,7 +43,7 @@ def _norm_chrom(chrom):
 def _parse_ad(format_field, sample_field, alt_index):
     """Pull the ALT-allele read count out of a FORMAT/sample AD field.
     Returns None if AD isn't present or can't be parsed (record is kept
-    in that case — absence of AD shouldn't silently drop a variant)."""
+    in that case: absence of AD shouldn't silently drop a variant)."""
     try:
         keys = format_field.split(":")
         vals = sample_field.split(":")

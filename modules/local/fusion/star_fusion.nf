@@ -1,9 +1,9 @@
-// Gene fusion detection, caller 1 of 2 (run alongside Arriba — see
-// arriba_align.nf/arriba.nf — rather than instead of it, per
+// Gene fusion detection, caller 1 of 2 (run alongside Arriba: see
+// arriba_align.nf/arriba.nf: rather than instead of it, per
 // --fusion_callers). STAR-Fusion needs its own CTAT genome resource lib
 // (params.ctat_resource_lib), separate from this pipeline's own
 // GRCh38/GENCODE STAR index/genome_fasta/gtf that Arriba's STAR pass
-// reuses — the two tools' STAR runs are NOT shared, each needs its own
+// reuses: the two tools' STAR runs are NOT shared, each needs its own
 // aligner invocation tuned to what it detects fusions from.
 
 process STAR_FUSION {

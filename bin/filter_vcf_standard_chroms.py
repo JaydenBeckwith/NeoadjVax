@@ -4,7 +4,7 @@ Filter a VCF (plain or .gz) down to standard chromosomes (1-22, X, Y, MT/M),
 with or without a "chr" prefix.
 
 Ported verbatim from Jayden's original DNA pVACseq script
-(filter_vcf_standard_chroms) so pipeline behaviour is unchanged — this now
+(filter_vcf_standard_chroms) so pipeline behaviour is unchanged: this now
 runs as its own step (FILTER_STANDARD_CHROMS) instead of an inline function.
 
 Usage: filter_vcf_standard_chroms.py <in.vcf[.gz]> <out.vcf>

@@ -1,4 +1,4 @@
-// New — Arriba fusion calling. CLI flags copied verbatim from Arriba's own
+// New: Arriba fusion calling. CLI flags copied verbatim from Arriba's own
 // documented quickstart (github.com/suhrig/arriba wiki, "Command-line
 // options"): -x main alignment, -o/-O passed/discarded fusions, -a
 // genome fasta, -g GTF, and the optional-but-strongly-recommended -b
@@ -8,11 +8,11 @@
 // build-specific and distributed separately from the arriba binary itself
 // (via its own bundled `download_references.sh ASSEMBLY+ANNOTATION`
 // script, e.g. `download_references.sh hg38+GENCODE46` to match this
-// pipeline's GENCODE v46 GTF) — not something to fetch or fabricate here.
+// pipeline's GENCODE v46 GTF): not something to fetch or fabricate here.
 // params.arriba_blacklist/arriba_known_fusions/arriba_protein_domains
 // default to null; -b/-k/-p are only added to the command when set, so
 // Arriba still runs without them (Arriba documents this as supported, just
-// lower-specificity — more false-positive fusions from read-through
+// lower-specificity: more false-positive fusions from read-through
 // transcription, homology, etc.) rather than hard-erroring. Strongly
 // recommended to fetch and set these before trusting real results.
 
@@ -37,7 +37,7 @@ process ARRIBA {
     def protein_domains_opt = params.arriba_protein_domains ? "-p ${params.arriba_protein_domains}" : ''
     """
     if [ -z "${params.arriba_blacklist}" ]; then
-        echo "WARNING: --arriba_blacklist not set — running Arriba without a blacklist, which Arriba's own docs say increases false-positive fusion calls. Run Arriba's download_references.sh for your assembly+annotation build and set --arriba_blacklist before trusting real results." >&2
+        echo "WARNING: --arriba_blacklist not set: running Arriba without a blacklist, which Arriba's own docs say increases false-positive fusion calls. Run Arriba's download_references.sh for your assembly+annotation build and set --arriba_blacklist before trusting real results." >&2
     fi
 
     arriba \\

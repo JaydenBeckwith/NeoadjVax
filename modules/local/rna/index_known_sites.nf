@@ -1,5 +1,5 @@
 // Not present in the original script (it assumed .tbi indexes already sat
-// next to the known-sites VCFs on Gadi) — added so the pipeline is
+// next to the known-sites VCFs on Gadi): added so the pipeline is
 // self-contained if that's ever not true.
 
 process TABIX_INDEX {

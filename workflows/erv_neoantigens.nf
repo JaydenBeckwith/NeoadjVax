@@ -1,24 +1,24 @@
 /*
  * ERV (endogenous retrovirus) neoantigen discovery branch. New territory,
- * and — per the peptide-generation stub below — still the least
+ * and: per the peptide-generation stub below: still the least
  * standardized of the three ("new territory" branches), but the calling
  * step itself is now real, not just sketched:
  *
  *   RNA FASTQ (direct, or BAM→FASTQ) ─▶ ERV_STAR_ALIGN ─▶ SAMTOOLS_COLLATE ─▶ TELESCOPE_QUANT ─▶ ERV_TO_PEPTIDE (stub)
  *
  * ERV_STAR_ALIGN runs its own dedicated STAR pass with relaxed multimapping
- * (--outFilterMultimapNmax 100 --winAnchorMultimapNmax 100) — it can't reuse
+ * (--outFilterMultimapNmax 100 --winAnchorMultimapNmax 100): it can't reuse
  * RNA_VARIANT_CALLING's BAM, which discards multi-mapping reads at
  * --outFilterMultimapNmax 2, exactly the reads ERV/TE loci need since most
  * are repetitive. See modules/local/erv/erv_star_align.nf for the sourcing
  * of that parameter choice.
  *
- * SAMTOOLS_COLLATE re-collates STAR's BAM before Telescope — Telescope
+ * SAMTOOLS_COLLATE re-collates STAR's BAM before Telescope: Telescope
  * requires collated (mate pairs adjacent), not coordinate-sorted, input;
  * see modules/local/erv/collate_bam.nf.
  *
  * Takes rna_bam OR rna_fastq_r1/r2 from the samplesheet, same pattern as
- * fusion_neoantigens.nf — rna_bam rows go through BAM_TO_FASTQ (reused from
+ * fusion_neoantigens.nf: rna_bam rows go through BAM_TO_FASTQ (reused from
  * the RNA variant-calling branch) first. rna_vcf-only rows have nothing for
  * this branch to align and are skipped.
  */
@@ -36,7 +36,7 @@ workflow ERV_NEOANTIGENS {
 
     main:
     if (!params.erv_annotation_gtf) {
-        error "ERV_NEOANTIGENS needs --erv_annotation_gtf (a Telescope-format GTF from mlbendall/telescope_annotation_db, e.g. retro.hg38.v1 — see modules/local/erv/telescope_quant.nf)"
+        error "ERV_NEOANTIGENS needs --erv_annotation_gtf (a Telescope-format GTF from mlbendall/telescope_annotation_db, e.g. retro.hg38.v1: see modules/local/erv/telescope_quant.nf)"
     }
     erv_gtf = Channel.fromPath(params.erv_annotation_gtf).collect()
     star_index = Channel.fromPath(params.star_index_dir).collect()

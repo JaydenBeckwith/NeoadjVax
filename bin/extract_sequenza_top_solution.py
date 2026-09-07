@@ -5,24 +5,24 @@ output for one sample.
 
 run-sequenza.R calls the sequenza R package's sequenza.extract() /
 sequenza.fit() / sequenza.results() with sample.id=<sample>,
-out.dir=<sample>_OUTPUT — none of that is guessed, it's read straight out
+out.dir=<sample>_OUTPUT: none of that is guessed, it's read straight out
 of the script you sent (bin/run-sequenza.R). What IS a targeted-but-
 unverified assumption is what happens in THIS script: none of your four
 Sequenza_tools scripts (nor run-sequenza.R itself) pick a single top
-solution out of sequenza.results()' output — that step doesn't exist yet
+solution out of sequenza.results()' output: that step doesn't exist yet
 anywhere in what you've sent, so it's new code, not a port.
 
 sequenza.results() is documented (sequenza R package docs, not anything
 specific to your setup) to write, among other files,
-"<sample>_alternative_solutions.txt" — one row per candidate
+"<sample>_alternative_solutions.txt": one row per candidate
 (cellularity, ploidy) solution the fit considered, with a column scoring
 each one (SLPP - scaled log posterior probability - in current sequenza
 versions; older versions may spell/case this differently, hence the
 tolerant column matching below). This script takes the row with the
-BEST score in that column as the "top solution" — a defensible, mechanical
+BEST score in that column as the "top solution": a defensible, mechanical
 choice, but still an assumption about what "top solution" should mean for
 your analysis, not something confirmed against NeoadjLOH's actual
-sequenza_top_solutions_summary.csv (which you also haven't sent — if a
+sequenza_top_solutions_summary.csv (which you also haven't sent: if a
 script already builds that file with different logic than "best-scoring
 row", use that instead of this one).
 
@@ -75,14 +75,14 @@ def main():
         # than failing on something cosmetic
         out_dir_candidates = glob.glob(os.path.join(args.results_dir, f'{args.sample}*_OUTPUT'))
     if not out_dir_candidates:
-        sys.exit(f"[ERROR] No '{args.sample}_OUTPUT' directory found under {args.results_dir} — "
+        sys.exit(f"[ERROR] No '{args.sample}_OUTPUT' directory found under {args.results_dir}: "
                   f"run-sequenza.R may not have completed successfully for {args.sample}.")
     out_dir = out_dir_candidates[0]
 
     sol_file = os.path.join(out_dir, f'{args.sample}_alternative_solutions.txt')
     if not os.path.isfile(sol_file):
         sys.exit(f"[ERROR] Expected {sol_file} (sequenza.results()' standard alternative-solutions output) "
-                  f"not found in {out_dir} — contents: {os.listdir(out_dir) if os.path.isdir(out_dir) else '<missing>'}. "
+                  f"not found in {out_dir}: contents: {os.listdir(out_dir) if os.path.isdir(out_dir) else '<missing>'}. "
                   f"This script targets the standard sequenza R package output convention; if your actual output "
                   f"is named/shaped differently, this needs adjusting rather than guessing further.")
 
@@ -100,7 +100,7 @@ def main():
     score_col = find_column(fieldnames, SCORE_COL_PATTERNS)
 
     if not cellularity_col or not ploidy_col:
-        sys.exit(f"[ERROR] Could not find cellularity/ploidy columns in {sol_file} — found columns: {fieldnames}. "
+        sys.exit(f"[ERROR] Could not find cellularity/ploidy columns in {sol_file}: found columns: {fieldnames}. "
                   f"Column-name matching is deliberately strict here rather than guessing which column is which.")
 
     if score_col:
@@ -108,7 +108,7 @@ def main():
         print(f"[INFO] {args.sample}: picked best-scoring row by '{score_col}' out of {len(rows)} candidate solutions", file=sys.stderr)
     else:
         best_row = rows[0]
-        print(f"[WARN] {args.sample}: no recognizable score column in {fieldnames} — falling back to the FIRST "
+        print(f"[WARN] {args.sample}: no recognizable score column in {fieldnames}: falling back to the FIRST "
               f"row of {len(rows)} candidate solutions. Verify this is actually the top solution before trusting it.", file=sys.stderr)
 
     purity = best_row[cellularity_col]

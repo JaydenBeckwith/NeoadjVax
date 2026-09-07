@@ -3,9 +3,9 @@
 //
 // Combines the typing result + freq list from SPECHLA_TYPING with tumor
 // purity/ploidy to compute per-locus allelic copy ratio and call LOH.
-// Purity/ploidy come from Sequenza (see workflows/purity_ploidy.nf — a
+// Purity/ploidy come from Sequenza (see workflows/purity_ploidy.nf: a
 // stub pending Jayden's Sequenza_tools code) or, in the meantime, from a
-// manually-supplied CSV / standalone samplesheet — see
+// manually-supplied CSV / standalone samplesheet: see
 // assets/samplesheet_schema.md and docs/ARCHITECTURE.md.
 //
 // -C 5 is a fixed flag in the original run_sample.pbs (not templated

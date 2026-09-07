@@ -1,4 +1,4 @@
-// New code — none of your Sequenza_tools scripts pick a single (purity,
+// New code: none of your Sequenza_tools scripts pick a single (purity,
 // ploidy) "top solution" per sample; run-sequenza.R stops at
 // sequenza.results(), which writes several candidate-solution files, not
 // one answer. This step exists because HLA_LOH (workflows/hla_loh.nf)
@@ -12,7 +12,7 @@
 // falling back to the first row with a loud warning if no such column is
 // found. This is a defensible mechanical choice, not a confirmed match to
 // NeoadjLOH's sequenza_top_solutions_summary.csv (which wasn't among what
-// you sent) — spot-check one real sample's output against this script's
+// you sent): spot-check one real sample's output against this script's
 // pick before trusting it in an actual HLA-LOH run.
 
 process SEQUENZA_EXTRACT_TOP_SOLUTION {

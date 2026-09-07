@@ -1,6 +1,6 @@
 // Ported from: DNA pVACseq script -> align_and_index() Picard AddOrReplaceReadGroups call
 // NOTE: original hardcoded RGID=1/RGLB=lib1/RGPU=unit1 for both tumor and
-// normal — kept per-sample-type here (RGID includes sample_type) so tumor
+// normal: kept per-sample-type here (RGID includes sample_type) so tumor
 // and normal read groups don't collide once merged in downstream QC.
 
 process ADD_READ_GROUPS {

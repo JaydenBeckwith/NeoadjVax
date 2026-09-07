@@ -1,5 +1,5 @@
 // Ported from: RNA_variant_pipeline.sh, Stage 1 (star_index_build PBS job)
-// sjdbOverhang 149 was hardcoded for the original read length — exposed as
+// sjdbOverhang 149 was hardcoded for the original read length: exposed as
 // a param since future cohorts may use a different read length.
 
 process STAR_INDEX {
@@ -19,7 +19,7 @@ process STAR_INDEX {
     """
     mkdir -p star_index
     if [ -f "${params.star_index_dir}/SA" ] && [ -s "${params.star_index_dir}/SA" ]; then
-        echo "[INFO] STAR index already exists at ${params.star_index_dir} — linking instead of rebuilding"
+        echo "[INFO] STAR index already exists at ${params.star_index_dir}: linking instead of rebuilding"
         ln -s ${params.star_index_dir}/* star_index/
     else
         STAR \\

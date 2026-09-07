@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Submits the Nextflow DRIVER process itself as its own small PBS job —
+# Submits the Nextflow DRIVER process itself as its own small PBS job:
 # NCI's documented pattern for running Nextflow pipelines on Gadi (see
 # docs/RUNNING_ON_GADI.md). This job just orchestrates: it stays cheap
 # (1 cpu, modest mem) and in turn submits every pipeline step as its OWN
@@ -8,7 +8,7 @@
 # (executor.queueSize = 30 caps how many run concurrently, matching the
 # original RNA script's MAX_CONCURRENT).
 #
-# BEFORE first use: run bin/prefetch_containers.sh from the LOGIN node —
+# BEFORE first use: run bin/prefetch_containers.sh from the LOGIN node:
 # this driver job runs on a compute node with no external network, so
 # every container must already be cached or the run will fail on the
 # first process that needs one.

@@ -1,5 +1,5 @@
 // pvacfuse itself is a real, documented pvactools subcommand (same
-// container/algorithm set as pvacseq) — the uncertain part of this branch
+// container/algorithm set as pvacseq): the uncertain part of this branch
 // is AGFUSION_ANNOTATE upstream, not this step. Tagged/published per
 // caller (starfusion/arriba run in parallel, see fusion_neoantigens.nf)
 // so results from each don't collide.

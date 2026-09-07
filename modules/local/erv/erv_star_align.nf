@@ -1,4 +1,4 @@
-// New — ERV/transposable-element quantification needs its own STAR pass,
+// New: ERV/transposable-element quantification needs its own STAR pass,
 // same shape of problem already flagged for Arriba (see
 // modules/local/fusion/arriba_align.nf): this pipeline's RNA branch aligns
 // with --outFilterMultimapNmax 2, which throws away exactly the
@@ -15,12 +15,12 @@
 // pairing for retaining TE-derived multimappers. Telescope's own project
 // (mlbendall/telescope_tutorial) documents its alignment recipe around
 // Bowtie2 (-k 100 --very-sensitive-local), not STAR, so there's no
-// STAR-specific number from Telescope itself to defer to instead — 100/100
+// STAR-specific number from Telescope itself to defer to instead: 100/100
 // is the closest match to that same "keep up to ~100 mapping loci per read"
 // intent, translated to STAR's own flags.
 //
 // Reuses this pipeline's existing GRCh38/GENCODE STAR index rather than a
-// second reference set — same reasoning as Arriba's STAR pass.
+// second reference set: same reasoning as Arriba's STAR pass.
 
 process ERV_STAR_ALIGN {
     tag "${meta.id}:${meta.timepoint}"

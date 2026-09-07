@@ -1,6 +1,6 @@
 // Ported from: RNA_variant_pipeline.sh Step 1-2/12
 // (samtools sort -n -> Picard SamToFastq). Original checkpointed by
-// checking for an existing FASTQ and skipping — Nextflow's own -resume
+// checking for an existing FASTQ and skipping: Nextflow's own -resume
 // cache handles that now, so the manual existence check is dropped.
 // Only used when the RNA samplesheet supplies rna_bam rather than FASTQs
 // directly (see RNA_VARIANT_CALLING workflow).

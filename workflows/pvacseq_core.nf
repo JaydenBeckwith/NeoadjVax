@@ -1,5 +1,5 @@
 /*
- * Core neoantigen-score branch — the part of the pipeline that already had
+ * Core neoantigen-score branch: the part of the pipeline that already had
  * a design ([[neoantigen-score]]) before this repo existed:
  *
  *   baseline DNA somatic calls ──┐
@@ -11,16 +11,16 @@
  *                                   DNA samplesheet)
  *
  * One DNA VCF per patient is checked against RNA support at every timepoint
- * that patient has — this is what produces the baseline-vs-week-6(+)
+ * that patient has: this is what produces the baseline-vs-week-6(+)
  * comparison [[ines]] asked about.
  *
  * HLA typing note: xHLA types class I (A/B/C) and class II DRB1/DQB1/DPB1,
- * but only the beta chain for DQ/DP — pVACtools needs those paired with an
+ * but only the beta chain for DQ/DP: pVACtools needs those paired with an
  * alpha chain (DQA1/DPA1) it doesn't type, so HLA_TYPING_XHLA excludes
  * DQB1/DPB1 from the allele string it hands to PVACSEQ_RUN (see that
  * module's comments and bin/parse_xhla_result.py). Only class I + DRB1
  * reach pVACseq today. Also note: pvacseq_algorithms currently defaults to
- * MHCflurry (class I only) — DRB1 alleles won't actually get predicted
+ * MHCflurry (class I only): DRB1 alleles won't actually get predicted
  * against until a class II algorithm is added to that param too.
  */
 
@@ -54,7 +54,7 @@ workflow PVACSEQ_CORE {
 
     // --- HLA alleles: manual override from the DNA samplesheet, else type it ---
     // samplesheet field uses '|' as the allele separator (a literal comma
-    // would be parsed as another CSV column) — converted to the ','-joined
+    // would be parsed as another CSV column): converted to the ','-joined
     // format pvacseq run expects, matching HLA_TYPING_OPTITYPE's output shape
     manual_hla_ch = dna_samplesheet_ch
         .filter { row -> row.hla_alleles }

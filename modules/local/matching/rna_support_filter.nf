@@ -1,4 +1,4 @@
-// New module — implements the RNA-support check from [[neoantigen-score]]:
+// New module: implements the RNA-support check from [[neoantigen-score]]:
 // "mapping variant loci to matched RNA via variant calling on the RNA
 // sample to see how many carry over". Did not exist in either original
 // script. Runs once per (patient, timepoint) since RNA is longitudinal.

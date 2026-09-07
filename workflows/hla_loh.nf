@@ -1,5 +1,5 @@
 /*
- * HLA loss-of-heterozygosity (LOH) branch — optional, independently
+ * HLA loss-of-heterozygosity (LOH) branch: optional, independently
  * runnable (--run_hla_loh, default off). Ported from
  * https://github.com/JaydenBeckwith/NeoadjLOH ("specHLA" directory),
  * which wraps SpecHLA (https://github.com/deepomicslab/SpecHLA) in three
@@ -8,7 +8,7 @@
  * purity/ploidy to interpret allelic imbalance.
  *
  * This is a separate typing call from HLA_TYPING_XHLA (used by
- * PVACSEQ_CORE, on the NORMAL bam, for pVACseq's input alleles) — the two
+ * PVACSEQ_CORE, on the NORMAL bam, for pVACseq's input alleles): the two
  * are not interchangeable and cannot share output. xHLA answers "what are
  * this patient's germline HLA alleles, for neoantigen prediction". SpecHLA
  * here answers "has this tumor lost an HLA allele", which is why it types
@@ -17,9 +17,9 @@
  *
  * Purity/ploidy source: either the (currently stubbed) PURITY_PLOIDY
  * workflow's output, or a manually-supplied --purity_ploidy_csv /
- * --hla_loh_samplesheet — see assets/samplesheet_schema.md. Whichever
+ * --hla_loh_samplesheet: see assets/samplesheet_schema.md. Whichever
  * source, the format matches NeoadjLOH's PURITY_CSV: sample,purity,ploidy
- * (comma-delimited — see the note in docs/ARCHITECTURE.md about a stale
+ * (comma-delimited: see the note in docs/ARCHITECTURE.md about a stale
  * comment in the original config.sh implying tab-delimited).
  */
 
@@ -37,7 +37,7 @@ workflow HLA_LOH {
     SPECHLA_EXTRACT_HLA_READS(tumor_bam_ch)
     SPECHLA_TYPING(SPECHLA_EXTRACT_HLA_READS.out.reads)
 
-    // join typing output to purity/ploidy on patient_id (meta.id) — a
+    // join typing output to purity/ploidy on patient_id (meta.id): a
     // patient with a tumor BAM but no matching purity/ploidy row is
     // silently dropped here rather than erroring, since .join() defaults
     // to inner-join; see docs/ARCHITECTURE.md for why that's the current

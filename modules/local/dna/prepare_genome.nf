@@ -1,5 +1,5 @@
 // Shared genome prep (not present in the original scripts, which assumed
-// these existed already) — needed once so GATK tools have a .fai/.dict.
+// these existed already): needed once so GATK tools have a .fai/.dict.
 // Used by both the DNA and RNA branches.
 
 process SAMTOOLS_FAIDX {

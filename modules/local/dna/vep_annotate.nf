@@ -1,6 +1,6 @@
 // Ported from: DNA pVACseq script -> run_vep()
 // Wildtype + Frameshift plugins are required by pVACseq for correct
-// wild-type/mutant peptide pairing and frameshift neoantigen calling —
+// wild-type/mutant peptide pairing and frameshift neoantigen calling:
 // kept exactly as specified in the original script.
 
 process VEP_ANNOTATE {

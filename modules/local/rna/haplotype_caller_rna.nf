@@ -1,6 +1,6 @@
 // Ported from: RNA_variant_pipeline.sh Step 9/12 (GATK HaplotypeCaller)
 // --dont-use-soft-clipped-bases is RNA-specific (avoids spurious calls at
-// splice junctions) — carried over verbatim.
+// splice junctions): carried over verbatim.
 
 process HAPLOTYPE_CALLER_RNA {
     tag "${meta.id}:${meta.timepoint}"

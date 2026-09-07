@@ -1,5 +1,5 @@
 // Ported from: RNA_variant_pipeline.sh Step 6/12 (GATK SplitNCigarReads)
-// RNA-specific step (splits reads with N CIGAR ops at spliced junctions) —
+// RNA-specific step (splits reads with N CIGAR ops at spliced junctions):
 // this is why the RNA and DNA branches diverge after MarkDuplicates.
 
 process SPLIT_NCIGAR_READS {

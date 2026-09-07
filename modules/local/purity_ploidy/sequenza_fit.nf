@@ -2,12 +2,12 @@
 // https://github.com/JaydenBeckwith/Sequenza_tools
 //
 // Decompresses the merged seqz file (R's vroom-based gzip reading was
-// unreliable under R 4.0 per the original script's own comment — kept the
+// unreliable under R 4.0 per the original script's own comment: kept the
 // same decompress-then-cleanup approach rather than trying to feed R the
 // .gz directly) and runs run-sequenza.R sample sex, matching the original
 // invocation exactly. The original cd'd into a per-sample SAMPLE_OUTDIR
 // before running Rscript and let it write into cwd; a Nextflow process's
-// own work directory already plays that role, so there's no separate cd —
+// own work directory already plays that role, so there's no separate cd:
 // whatever run-sequenza.R writes lands directly in this task's outputs.
 //
 // bin/run-sequenza.R is now your real script, unmodified: sequenza.extract()
@@ -18,21 +18,21 @@
 // below finds it the same way it would find any other bin/ script.
 //
 // IMPORTANT: the R script's own branch is `if (args[3] == "male") ... else
-// <female path>` — literally any value other than the exact string "male"
+// <female path>`: literally any value other than the exact string "male"
 // takes the FEMALE path (wrong chromosome list / X-Y handling for a male
 // sample if the sex value isn't spelled exactly right). This pipeline's
 // --sequenza_gender_csv lookup lowercases whatever's in column 7, so it
-// works correctly if your CSV spells out "Male"/"Female" (any case) —
+// works correctly if your CSV spells out "Male"/"Female" (any case):
 // but if it instead uses single-letter codes ("M"/"F"), those lowercase to
 // "m"/"f", neither of which equals "male", and every sample would
 // silently run down the female path. Worth confirming your CSV's actual
-// gender values before trusting a real run — see
+// gender values before trusting a real run: see
 // assets/samplesheet_schema.md.
 //
 // run-sequenza.R writes into sequenza.results()'s out.dir =
 // "<sample_name>_OUTPUT" (a subdirectory it creates itself, using
 // sample_name = args[2] verbatim, not the hyphen-sanitized job_name
-// variable) — relative to R's own working directory, which is why this
+// variable): relative to R's own working directory, which is why this
 // process's script cd's into sequenza_raw_out/ before invoking Rscript, so
 // that ends up at sequenza_raw_out/<meta.id>_OUTPUT/. See
 // modules/local/purity_ploidy/sequenza_extract_top_solution.nf for what's
@@ -42,7 +42,7 @@
 //
 // Same conda-env caveat as SEQUENZA_MERGE_BINS: this process does NOT run
 // in the sequenza Singularity container, it needs the r_sequenza conda env
-// on whatever host executes it — confirm params.sequenza_conda_sh still
+// on whatever host executes it: confirm params.sequenza_conda_sh still
 // resolves (the original path is under a personal Gadi home directory).
 
 process SEQUENZA_FIT {
@@ -74,7 +74,7 @@ process SEQUENZA_FIT {
 
     RUN_SEQUENZA_R="\$(command -v run-sequenza.R || true)"
     if [ -z "\${RUN_SEQUENZA_R}" ]; then
-        echo "ERROR: run-sequenza.R not found on PATH / in bin/ for ${meta.id} — it should be at bin/run-sequenza.R in this pipeline and Nextflow auto-adds bin/ to PATH; check it's actually present/synced." >&2
+        echo "ERROR: run-sequenza.R not found on PATH / in bin/ for ${meta.id}: it should be at bin/run-sequenza.R in this pipeline and Nextflow auto-adds bin/ to PATH; check it's actually present/synced." >&2
         exit 1
     fi
 

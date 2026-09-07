@@ -2,7 +2,7 @@
 // https://github.com/JaydenBeckwith/NeoadjLOH
 //
 // Pulls reads mapping to the HLA loci (and ALT contigs) out of the TUMOR
-// BAM — SpecHLA's LOH workflow is documented as tumor-only ("Detect HLA
+// BAM: SpecHLA's LOH workflow is documented as tumor-only ("Detect HLA
 // LOH in tumor samples"), so unlike HLA_TYPING_XHLA (which deliberately
 // runs on the normal BAM to dodge tumor HLA-LOH bias), this branch runs on
 // tumor by design: the LOH call *is* the tumor-vs-germline-baseline signal
@@ -12,7 +12,7 @@
 // The fastq-pairing fallback below is copied verbatim from run_sample.pbs,
 // gotcha comment included: this cohort's sample IDs are digit-heavy (e.g.
 // "...0000141960..."), so a loose "*1*"/"*2*" glob spuriously matches
-// digits inside the sample ID itself rather than the read-pair marker —
+// digits inside the sample ID itself rather than the read-pair marker:
 // this is what silently handed SpecHLA the wrong fastq and made every
 // locus come back no_match on Jayden's first run. Anchor on the literal
 // "_1."/"_2." suffix and exclude the unpaired-singleton file instead.
@@ -38,7 +38,7 @@ process SPECHLA_EXTRACT_HLA_READS {
     FQ2="extracted_out/${meta.id}_extract_2.fq.gz"
     if [[ ! -s "\$FQ1" || ! -s "\$FQ2" ]]; then
         # Fall back to a search, but anchor on the real "_1."/"_2." read-pair
-        # suffix and explicitly exclude the unpaired-singleton file — see the
+        # suffix and explicitly exclude the unpaired-singleton file: see the
         # header comment above for why a bare "*1*"/"*2*" glob breaks on this
         # cohort's digit-heavy sample IDs.
         FQ1=\$(find extracted_out -iname "*_1.f*q.gz" ! -iname "*unpaired*" | sort | head -n1)

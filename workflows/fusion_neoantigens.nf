@@ -1,6 +1,6 @@
 /*
  * Gene fusion neoantigen discovery branch. Runs the requested fusion
- * caller(s) in parallel per patient-timepoint — default both:
+ * caller(s) in parallel per patient-timepoint: default both:
  *
  *   RNA FASTQ (direct, or BAM→FASTQ) ─┬─▶ STAR_FUSION      ─┐
  *                                     └─▶ ARRIBA_STAR_ALIGN ┴─▶ ARRIBA ─┐
@@ -9,25 +9,25 @@
  *
  * --fusion_callers (default 'starfusion,arriba') picks which caller(s)
  * run; results from each are kept separate all the way through (tagged by
- * caller, published to separate subdirectories) rather than merged —
+ * caller, published to separate subdirectories) rather than merged:
  * AGFusion/pVACfuse take one caller's format at a time, and there's no
  * settled reconciliation logic for two callers disagreeing on the same
  * fusion event (that's a real open decision if/when you want a combined
  * call set, not something to silently invent here).
  *
- * STAR_FUSION and ARRIBA_STAR_ALIGN each run their OWN STAR pass — they
+ * STAR_FUSION and ARRIBA_STAR_ALIGN each run their OWN STAR pass: they
  * are not sharing one alignment. STAR-Fusion's wrapper needs the CTAT
  * genome lib's bundled index; Arriba needs relaxed multimapping + specific
  * chimeric flags this pipeline's RNA branch doesn't set. See each
  * module's own comment.
  *
  * Takes rna_bam OR rna_fastq_r1/r2 from the samplesheet (previously only
- * rna_fastq_r1/r2 was consumed here — an open decision from the original
+ * rna_fastq_r1/r2 was consumed here: an open decision from the original
  * scaffold, now resolved by reusing RNA_VARIANT_CALLING's own BAM_TO_FASTQ
  * module for rna_bam rows).
  *
  * HLA alleles reuse whatever PVACSEQ_CORE typed/was given for that
- * patient — this workflow takes an hla_by_patient channel rather than
+ * patient: this workflow takes an hla_by_patient channel rather than
  * retyping, to avoid running xHLA twice per patient.
  */
 
@@ -48,7 +48,7 @@ workflow FUSION_NEOANTIGENS {
     def valid_callers = ['starfusion', 'arriba']
     def unknown = requested_callers - valid_callers
     if (unknown) {
-        error "FUSION_NEOANTIGENS: unknown --fusion_callers entr${unknown.size() > 1 ? 'ies' : 'y'} ${unknown} — valid values are ${valid_callers} (comma-separated to run more than one)"
+        error "FUSION_NEOANTIGENS: unknown --fusion_callers entr${unknown.size() > 1 ? 'ies' : 'y'} ${unknown}: valid values are ${valid_callers} (comma-separated to run more than one)"
     }
     def run_starfusion = 'starfusion' in requested_callers
     def run_arriba = 'arriba' in requested_callers
@@ -91,12 +91,12 @@ workflow FUSION_NEOANTIGENS {
         fusions_ch = fusions_ch.mix(ARRIBA.out.fusions)
     }
 
-    // fusions_ch: [meta, caller, fusion_file] — one entry per
+    // fusions_ch: [meta, caller, fusion_file]: one entry per
     // patient-timepoint-caller combination requested above
     AGFUSION_ANNOTATE(fusions_ch)
 
     if (!params.hla_alleles_manual) {
-        log.warn "FUSION_NEOANTIGENS: no --hla_alleles_manual given and this workflow doesn't yet consume PVACSEQ_CORE's typed HLA output — pvacfuse will need HLA alleles supplied another way for now"
+        log.warn "FUSION_NEOANTIGENS: no --hla_alleles_manual given and this workflow doesn't yet consume PVACSEQ_CORE's typed HLA output: pvacfuse will need HLA alleles supplied another way for now"
     }
     hla_ch = AGFUSION_ANNOTATE.out.annotated.map { meta, caller, dir -> tuple(meta, caller, dir, params.hla_alleles_manual) }
 

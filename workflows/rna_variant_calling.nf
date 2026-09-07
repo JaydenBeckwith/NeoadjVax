@@ -8,7 +8,7 @@
  *
  * NOTE the original script's tail (a BRAF-locus allelic-count extraction
  * feeding a "PIPELINE SUMMARY" collector job) was cut off mid-heredoc in
- * what was pasted in — braf_allelic_counts.tsv is referenced by the
+ * what was pasted in: braf_allelic_counts.tsv is referenced by the
  * cleanup step but never actually produced. Flagged rather than guessed at;
  * see docs/ARCHITECTURE.md open-questions section.
  */
@@ -40,7 +40,7 @@ workflow RNA_VARIANT_CALLING {
     SAMTOOLS_FAIDX(fasta)
     PICARD_CREATE_SEQUENCE_DICTIONARY(fasta)
     // NOTE: like BWA_INDEX in the DNA branch, this always runs even when
-    // --rna_skip_realignment leaves nothing that needs it — harmless.
+    // --rna_skip_realignment leaves nothing that needs it: harmless.
     STAR_INDEX(fasta, gtf)
 
     TABIX_MILLS(Channel.fromPath(params.known_mills))
@@ -69,7 +69,7 @@ workflow RNA_VARIANT_CALLING {
     // false, i.e. original behaviour: realign every rna_bam row through
     // STAR like the original PBS script always did). Set true when the
     // supplied BAMs are already aligned the way this pipeline wants
-    // (STAR two-pass, --outFilterMultimapNmax 2 — see star_align.nf) and
+    // (STAR two-pass, --outFilterMultimapNmax 2: see star_align.nf) and
     // realigning them would just burn Gadi walltime for no benefit.
     // Mixing is fine: rna_bam rows skip straight to ADD_READ_GROUPS_RNA,
     // any rna_fastq_r1/r2 rows still align normally either way, since
@@ -108,7 +108,7 @@ workflow RNA_VARIANT_CALLING {
     )
     VARIANT_FILTRATION_RNA(HAPLOTYPE_CALLER_RNA.out.vcf, fasta, SAMTOOLS_FAIDX.out.fai, PICARD_CREATE_SEQUENCE_DICTIONARY.out.dict)
     // VariantsToTable is a QC/reporting convenience, not consumed
-    // downstream — skipped for rna_vcf rows since there's no reason to
+    // downstream: skipped for rna_vcf rows since there's no reason to
     // regenerate it if a table wasn't already supplied alongside
     VARIANTS_TO_TABLE(VARIANT_FILTRATION_RNA.out.vcf)
 

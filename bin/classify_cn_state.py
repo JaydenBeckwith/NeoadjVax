@@ -9,14 +9,14 @@ state, using Jayden's stated rule for the neoadjuvant LOH analysis
     CNN_LOH        = B == 0 and CNt == 2   (2+0)
     LOH_AMPLIFIED  = B == 0 and CNt > 2
     (CNt == 0, biallelic loss, is left UNCLASSIFIED and written to a
-     separate file rather than dropped silently — this is exactly the
+     separate file rather than dropped silently: this is exactly the
      "heavy/pervasive genome-wide biallelic loss in 3 of 98 melanoma
      samples" pattern already flagged as worth a second look, possibly
      whole-genome-doubling related)
 
 IMPORTANT: this script reconstructs the rule as YOU described it in an
 earlier conversation, not a copy of your actual classify_cn_state R
-function — the column names/expected input below are standard Sequenza
+function: the column names/expected input below are standard Sequenza
 `sequenza.results()` output (chromosome, start.pos, end.pos, CNt, A, B,
 ...), but if your real script uses different column names, different
 segment merging, or additional filtering, replace this with your actual

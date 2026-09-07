@@ -1,5 +1,5 @@
 // Ported from: RNA_variant_pipeline.sh Step 4/12 (Picard AddOrReplaceReadGroups)
-// RGSM = sample basename (bn), matching the original — distinct from the
+// RGSM = sample basename (bn), matching the original: distinct from the
 // DNA branch's tumor/normal RGSM convention since RNA samples are one BAM
 // per patient-timepoint, not a tumor/normal pair.
 

@@ -3,7 +3,7 @@
 //
 // Calls 4-field HLA alleles (A/B/C/DPA1/DPB1/DQA1/DQB1/DRB1) from the
 // extracted read pair. Also selects the typing result file and builds the
-// freq-list Step 3 (cal.hla.copy.pl) needs — both moved into THIS process
+// freq-list Step 3 (cal.hla.copy.pl) needs: both moved into THIS process
 // rather than staying separate shell steps like the original PBS script,
 // which is the one structural change from the original: run_sample.pbs
 // could freely `find` across the whole job's $OUTROOT because every step
@@ -41,7 +41,7 @@ process SPECHLA_TYPING {
     # "*hla*result*.txt" and take the alphabetically-first hit: SpecHLA also
     # writes a more verbose "hla.result.details.txt", which sorts before the
     # plain file ("." < "t" in "details" vs "txt") and silently gets fed to
-    # cal.hla.copy.pl instead — it then fails to parse it (visible as repeated
+    # cal.hla.copy.pl instead: it then fails to parse it (visible as repeated
     # "Use of uninitialized value \$hla1/\$hla2" warnings) and leaves
     # Allele1/Allele2/KeptHLA/LossHLA blank in the output while copyratio
     # still looks plausible, so the failure is easy to miss.
@@ -52,11 +52,11 @@ process SPECHLA_TYPING {
     if [[ -z "\$HLA_RESULT" ]]; then
         HLA_RESULT=\$(find typing_out -iname "*hla*result*.txt" | sort | head -n1)
         if [[ -n "\$HLA_RESULT" ]]; then
-            echo "WARNING: only found '\$HLA_RESULT' (no plain hla.result.txt) for ${meta.id} — this previously caused cal.hla.copy.pl to leave KeptHLA/LossHLA blank; check the typing output naming" >&2
+            echo "WARNING: only found '\$HLA_RESULT' (no plain hla.result.txt) for ${meta.id}: this previously caused cal.hla.copy.pl to leave KeptHLA/LossHLA blank; check the typing output naming" >&2
         fi
     fi
     if [[ -z "\$HLA_RESULT" ]]; then
-        echo "ERROR: no hla result file found under typing_out for ${meta.id} — inspect the typing output and fix the 'find' pattern in this module if the naming differs" >&2
+        echo "ERROR: no hla result file found under typing_out for ${meta.id}: inspect the typing output and fix the 'find' pattern in this module if the naming differs" >&2
         exit 1
     fi
     echo "[INFO] Typing result: \$HLA_RESULT"
