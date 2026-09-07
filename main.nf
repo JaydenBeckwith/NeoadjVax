@@ -9,7 +9,7 @@
  *   DNA WGS/WES (tumor+normal, baseline) ─┐
  *                                          ├─▶ variant matching ─▶ pVACseq ─▶ core neoantigens (per RNA timepoint)
  *   RNA-seq (per timepoint) ───────────────┘        │
- *                                                    ├─▶ splicing branch  ─▶ pVACseq   (--run_splicing_neoantigens)
+ *                                                    ├─▶ splicing branch  ─▶ splice2neo peptide contexts (--run_splicing_neoantigens)
  *                                                    ├─▶ fusion branch    ─▶ pVACfuse (--run_fusion_neoantigens)
  *                                                    └─▶ ERV branch       ─▶ TBD       (--run_erv_neoantigens)
  *
@@ -143,7 +143,7 @@ def validateHlaLohSamplesheet(path) {
 include { DNA_VARIANT_CALLING }  from './workflows/dna_variant_calling'
 include { RNA_VARIANT_CALLING }  from './workflows/rna_variant_calling'
 include { PVACSEQ_CORE }         from './workflows/pvacseq_core'
-include { SPLICING_NEOANTIGENS } from './workflows/splicing_neoantigens'
+include { SPLICING_NEOANTIGENS; validateSplicingSamplesheets } from './workflows/splicing_neoantigens'
 include { FUSION_NEOANTIGENS }   from './workflows/fusion_neoantigens'
 include { ERV_NEOANTIGENS }      from './workflows/erv_neoantigens'
 include { ERV_DNA; validateErvDnaSamplesheet } from './workflows/erv_dna'
@@ -159,7 +159,7 @@ workflow {
     dna_samplesheet_ch = Channel.empty()
     rna_samplesheet_ch = Channel.empty()
 
-    if (params.run_dna_variant_calling || params.run_pvacseq_core || params.run_erv_dna) {
+    if (params.run_dna_variant_calling || params.run_pvacseq_core || params.run_erv_dna || params.run_splicing_neoantigens) {
         if (!params.dna_samplesheet) error "Please provide --dna_samplesheet (see assets/samplesheet_schema.md)"
         if (params.run_dna_variant_calling || params.run_pvacseq_core) {
             validateDnaSamplesheet(params.dna_samplesheet)
@@ -176,8 +176,15 @@ workflow {
         params.run_splicing_neoantigens || params.run_fusion_neoantigens ||
         params.run_erv_neoantigens) {
         if (!params.rna_samplesheet) error "Please provide --rna_samplesheet (see assets/samplesheet_schema.md)"
-        validateRnaSamplesheet(params.rna_samplesheet)
+        if (!params.run_splicing_neoantigens || params.run_rna_variant_calling || params.run_pvacseq_core ||
+            params.run_fusion_neoantigens || params.run_erv_neoantigens) {
+            validateRnaSamplesheet(params.rna_samplesheet)
+        }
         rna_samplesheet_ch = Channel.fromPath(params.rna_samplesheet).splitCsv(header: true)
+    }
+
+    if (params.run_splicing_neoantigens) {
+        validateSplicingSamplesheets(params.dna_samplesheet, params.rna_samplesheet, params.run_dna_variant_calling, params)
     }
 
     dna_variants_ch   = Channel.empty()
@@ -205,7 +212,7 @@ workflow {
     }
 
     if (params.run_splicing_neoantigens) {
-        SPLICING_NEOANTIGENS(rna_samplesheet_ch)
+        SPLICING_NEOANTIGENS(dna_samplesheet_ch, rna_samplesheet_ch, dna_variants_ch, params.run_dna_variant_calling)
     }
 
     if (params.run_fusion_neoantigens) {

@@ -35,6 +35,8 @@ echo ""
 
 # uri -> local cache filename, must match nextflow.config's containers{} block
 declare -A IMAGES=(
+    ["docker://ghcr.io/tron-bioinformatics/splice2neo:v0.6.14"]="ghcr.io-tron-bioinformatics-splice2neo-v0.6.14.img"
+    ["docker://python:3.11.11-slim"]="python-3.11.11-slim.img"
     ["https://depot.galaxyproject.org/singularity/bwa:0.7.17--hed695b0_7"]="depot.galaxyproject.org-singularity-bwa-0.7.17--hed695b0_7.img"
     ["https://depot.galaxyproject.org/singularity/trim-galore:0.6.10--hdfd78af_0"]="depot.galaxyproject.org-singularity-trim-galore-0.6.10--hdfd78af_0.img"
     ["https://depot.galaxyproject.org/singularity/fastqc:0.12.1--hdfd78af_0"]="depot.galaxyproject.org-singularity-fastqc-0.12.1--hdfd78af_0.img"
@@ -61,4 +63,4 @@ for uri in "${!IMAGES[@]}"; do
 done
 
 echo ""
-echo "[DONE] All containers cached. -profile gadi runs should now find them without a network call."
+echo "[DONE] Public containers cached. Custom ERVcaller/splicing-tools images still need explicit local .sif paths."

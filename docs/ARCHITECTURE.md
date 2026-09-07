@@ -81,9 +81,13 @@ flowchart TB
     vep --> pvacseq
     pvacseq --> core["Core neoantigen calls<br/>(per patient × timepoint)"]
 
-    subgraph SPLICE["splicing_neoantigens.nf — stub past ingestion"]
-        s1["Existing SpliceAI pipeline output<br/>(reused, not re-run)"] --> s2["Filter by delta score"]
-        s2 --> s3["Splice→peptide — TODO"]
+    subgraph SPLICE["splicing_neoantigens.nf — DNA + RNA integration"]
+        s1["Somatic DNA VCF<br/>WES/WGS or DNA branch"] --> s2["SpliceAI / per-effect score filter"]
+        s2 --> s3["splice2neo junction + transcript annotation"]
+        s4["RNA BAM/FASTQ, any timepoint"] --> s5["RegTools + LeafCutter"]
+        s3 --> s6["Exclude GENCODE + normal junctions<br/>Require sample-specific RNA support"]
+        s5 --> s6
+        s6 --> s7["splice2neo CDS/ORF peptide contexts<br/>No HLA ranking"]
     end
 
     subgraph FUSION["fusion_neoantigens.nf — --fusion_callers"]
@@ -324,11 +328,12 @@ choice it needed to make.
 
 ## Open decisions — need your input, not guessed at
 
-1. **Splicing → peptide.** No standard tool converts a novel splice
-   junction into a candidate peptide. Options: NeoSplice (purpose-built,
-   narrower toolchain) vs. custom ORF translation built on the
-   IsoformSwitchAnalyzeR output `[[neoadjuvant-splicing]]` already
-   produces. See `modules/local/splicing/splice_to_peptide.nf`.
+1. **Splicing → peptide: implemented, biological validation remains.**
+   DNA SpliceAI + RNA LeafCutter now feed splice2neo v0.6.14 for
+   junction/transcript annotation, GENCODE/normal exclusion, RNA intersection,
+   and CDS/ORF peptide-context prediction. See [SPLICING.md](SPLICING.md).
+   HLA binding, normal-proteome peptide screening and EasyQuant re-quantification
+   are not implemented. SpliceAI-predicted intron retention is excluded.
 2. **ERV → peptide.** Same shape of problem, less prior art — now backed by
    two actual published approaches to pick between rather than just a
    hypothetical shape (researched this pass): (a) six-frame ORF translation
@@ -394,7 +399,7 @@ wrapping your actual `bin/merge-bin200-files.pl` /
 `bin/merge-header-bin200.pl` / `bin/run-sequenza.R`, WGS/200bp-bins only).
 
 **New but complete modules**, not yet run against real data:
-xHLA typing (class I + DRB1), SpliceAI-output filtering, gene fusion calling
+xHLA typing (class I + DRB1), DNA SpliceAI + RNA LeafCutter + splice2neo peptide contexts, gene fusion calling
 via STAR-Fusion and/or Arriba (`--fusion_callers`, both run in parallel by
 default, each with its own dedicated STAR pass — see `modules/local/fusion/`)
 + pVACfuse (caller-aware, downstream of AGFusion), ERV/TE quantification via
@@ -405,7 +410,7 @@ top-solution extraction (`sequenza_extract_top_solution.nf` — new code, not
 a port, see the caveat above).
 
 **Explicit TODO stubs** (exit 1, comment explains the decision needed):
-splice→peptide, ERV→peptide, AGFusion annotation.
+ERV→peptide, AGFusion annotation.
 
 **Unverified detail worth a one-off sanity check**: xHLA's in-container
 entrypoint (`python /opt/bin/run.py`) and image tag (`0.0.0`) are both
@@ -425,9 +430,8 @@ command in that param block's comment before a real run.
    and do a dry run of just the core backbone
    (`--run_splicing_neoantigens false --run_fusion_neoantigens false
    --run_erv_neoantigens false`) before touching the new branches.
-3. Pick a direction on the two open peptide-generation decisions above
-   (splicing→peptide, ERV→peptide) — those block real end-to-end progress on
-   those two branches more than any missing code does. The fusion branch's
+3. Validate the splicing integration on a reference-matched pilot sample
+   and choose an ERV peptide-generation approach. The fusion branch's
    remaining gap (AGFusion) isn't a design decision, just a prerequisite not
    yet done — see item 7 below.
 4. Confirm `--sequenza_conda_sh` / `--sequenza_conda_bin_fallback` point at

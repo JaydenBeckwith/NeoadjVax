@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1810" viewBox="0 0 1600 1810" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2010" viewBox="0 0 1600 2010" role="img" aria-labelledby="title desc">
 <title id="title">NeoadjVax workflow map</title>
-<desc id="desc">Metromap of nine Nextflow branches. DNA and RNA variant calling feed RNA-support filtering, VEP and pVACseq, with HLA alleles supplied separately. RNA can be from any timepoint. Optional fusion, splicing and RNA ERV routes have unfinished peptide stages. ERVcaller produces separate DNA insertion evidence for tumour and normal. Sequenza purity and ploidy can feed SpecHLA HLA-LOH analysis. Repeated input stations denote the same input types, not dependencies between lanes.</desc>
+<desc id="desc">Metromap of nine Nextflow branches. DNA and RNA variant calling feed RNA-support filtering, VEP and pVACseq, with HLA alleles supplied separately. RNA can be from any timepoint. The splicing route combines DNA WES/WGS SpliceAI predictions and RNA LeafCutter junction evidence in splice2neo, excludes GENCODE and normal-panel junctions, and generates CDS/ORF peptide contexts without HLA ranking. Fusion and RNA ERV peptide stages remain unfinished. ERVcaller produces separate DNA insertion evidence for tumour and normal. Sequenza purity and ploidy can feed SpecHLA HLA-LOH analysis. Repeated input stations denote the same input types, not dependencies between lanes.</desc>
 <style>
 text {font-family:Arial,Helvetica,sans-serif;fill:#20303d}
 .title {font-size:38px;font-weight:700}
@@ -14,7 +14,7 @@ text {font-family:Arial,Helvetica,sans-serif;fill:#20303d}
 .station {fill:white;stroke:#20303d;stroke-width:3}
 .pending {stroke-dasharray:10 12}
 </style>
-<rect width="1600" height="1810" fill="white"/>
+<rect width="1600" height="2010" fill="white"/>
 <text x="70" y="65" class="title" text-anchor="start">NeoadjVax workflow map</text>
 <text x="70" y="101" class="subtitle" text-anchor="start">Nextflow DSL2 / melanoma neoantigen discovery</text>
 <text x="1530" y="65" class="small" text-anchor="end">READ LEFT TO RIGHT</text>
@@ -77,20 +77,36 @@ text {font-family:Arial,Helvetica,sans-serif;fill:#20303d}
 <text x="1500" y="781" class="todo" text-anchor="end">Downstream steps unfinished</text>
 <text x="560" y="835" class="small" text-anchor="middle">Each caller uses its own alignment</text>
 <text x="920" y="805" class="small" text-anchor="middle">Caller outputs kept separate</text>
-<path d="M100 950 H650" class="track " stroke="#bd60ce"/>
-<path d="M650 950 H1500" class="track pending" stroke="#9ba5af"/>
-<text x="205" y="889" class="label" text-anchor="middle">SpliceAI VCF</text>
-<text x="205" y="917" class="note" text-anchor="middle">Existing annotated output</text>
-<path d="M93 940h10l9 10-9 10h-10z" fill="#20303d"/>
-<circle cx="560" cy="950" r="11" class="station"/>
-<text x="560" y="889" class="label" text-anchor="middle">Splice-score filter</text>
-<text x="560" y="917" class="note" text-anchor="middle">Delta-score threshold</text>
-<circle cx="1000" cy="950" r="11" class="station" stroke-dasharray="4 3"/>
-<text x="1000" y="889" class="label" text-anchor="middle">Splice to peptide</text>
-<text x="1000" y="917" class="todo" text-anchor="middle">TODO: peptide generation</text>
-<path d="M1500 937v26" stroke="#20303d" stroke-width="6"/>
-<text x="1500" y="989" class="label" text-anchor="end">Splicing peptides</text>
-<text x="1500" y="1016" class="todo" text-anchor="end">Planned output</text>
+<!-- Splicing: two independent input routes, one patient-specific intersection. -->
+<path d="M100 940 H625 Q670 940 700 965 L715 978 Q735 995 780 995 H1500" class="track" stroke="#bd60ce"/>
+<path d="M100 1090 H625 Q670 1090 700 1060 L740 1020 Q765 995 800 995" class="track" stroke="#3985e8"/>
+<path d="M93 930h10l9 10-9 10h-10z" fill="#20303d"/>
+<text x="205" y="879" class="label" text-anchor="middle">DNA WES / WGS</text>
+<text x="205" y="907" class="note" text-anchor="middle">Tumour–normal somatic VCF</text>
+<circle cx="500" cy="940" r="11" class="station"/>
+<text x="500" y="879" class="label" text-anchor="middle">SpliceAI</text>
+<text x="500" y="907" class="note" text-anchor="middle">Per-effect score filter</text>
+<path d="M93 1080h10l9 10-9 10h-10z" fill="#20303d"/>
+<text x="205" y="1029" class="label" text-anchor="middle">Tumour RNA</text>
+<text x="205" y="1057" class="note" text-anchor="middle">Any timepoint / FASTQ or BAM</text>
+<circle cx="500" cy="1090" r="11" class="station"/>
+<text x="500" y="1029" class="label" text-anchor="middle">LeafCutter</text>
+<text x="500" y="1057" class="note" text-anchor="middle">RegTools junctions + counts</text>
+<circle cx="850" cy="995" r="11" class="station"/>
+<text x="850" y="916" class="label" text-anchor="middle">splice2neo</text>
+<text x="850" y="944" class="note" text-anchor="middle">Junction + transcript annotation</text>
+<circle cx="1050" cy="995" r="11" class="station"/>
+<text x="1050" y="1057" class="label" text-anchor="middle">Novel + RNA-supported</text>
+<text x="1050" y="1085" class="note" text-anchor="middle">Exclude GENCODE / normal</text>
+<text x="1050" y="1113" class="note" text-anchor="middle">Sample-specific read support</text>
+<circle cx="1260" cy="995" r="11" class="station"/>
+<text x="1260" y="916" class="label" text-anchor="middle">Peptide prediction</text>
+<text x="1260" y="944" class="note" text-anchor="middle">splice2neo / CDS + ORF</text>
+<path d="M1500 982v26" stroke="#20303d" stroke-width="6"/>
+<text x="1500" y="1057" class="label" text-anchor="end">Peptide contexts</text>
+<text x="1500" y="1085" class="note" text-anchor="end">No HLA ranking yet</text>
+<text x="70" y="1170" class="small" text-anchor="start">Existing SpliceAI VCFs and strand-aware LeafCutter counts can enter directly. Normal-panel filtering requires a supplied panel.</text>
+<g transform="translate(0 200)">
 <path d="M100 1145 H980" class="track " stroke="#c6a32d"/>
 <path d="M980 1145 H1500" class="track pending" stroke="#9ba5af"/>
 <text x="205" y="1084" class="label" text-anchor="middle">RNA FASTQ / BAM</text>
@@ -150,5 +166,6 @@ text {font-family:Arial,Helvetica,sans-serif;fill:#20303d}
 <path d="M395 1580 H445" class="track pending" stroke="#9ba5af"/>
 <text x="465" y="1586" class="small" text-anchor="start">Unfinished downstream path</text>
 <text x="1530" y="1586" class="small" text-anchor="end">Implementation status does not imply biological validation.</text>
+</g>
 </g>
 </svg>

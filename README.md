@@ -5,8 +5,9 @@ vaccine development.
 
 Orchestrated with Nextflow DSL2. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 for the full pipeline design, a diagram of how the branches fit together,
-and a list of open decisions that need input before the newer branches
-(splicing/fusion/ERV neoantigens) are ready to run for real. See
+and the remaining open decisions for fusion/ERV peptide generation.
+Splicing now combines DNA SpliceAI and RNA LeafCutter with splice2neo
+peptide-context prediction; see [the splicing guide](docs/SPLICING.md). See
 [`docs/RUNNING_ON_GADI.md`](docs/RUNNING_ON_GADI.md) for how to actually
 launch this on Gadi — it's not a `qsub script.sh` like the original
 scripts; Nextflow submits every step as its own PBS job for you, but
@@ -42,7 +43,7 @@ images, HLA/pVACseq settings, per-branch on/off switches).
 | `run_dna_variant_calling` | Ported from the original DNA script, default on |
 | `run_rna_variant_calling` | Ported from the original RNA PBS script, default on |
 | `run_pvacseq_core` | New RNA-support matching + pVACseq, default on |
-| `run_splicing_neoantigens` | New, default off — peptide step is a stub |
+| `run_splicing_neoantigens` | Optional DNA SpliceAI + RNA LeafCutter → splice2neo peptide contexts; GENCODE/normal filtering. See [splicing guide](docs/SPLICING.md) |
 | `run_fusion_neoantigens` | New, default off — STAR-Fusion + Arriba calling is real (`--fusion_callers`), AGFusion annotation downstream is still a stub |
 | `run_erv_neoantigens` | New, default off — ERV/TE quantification (own STAR pass + Telescope) is real, peptide step is a stub |
 | `run_erv_dna` | Optional ERVcaller v1.4 insertion calling on tumour/normal DNA BAMs; separate from RNA expression and peptide prediction |
@@ -84,6 +85,19 @@ nextflow run main.nf -profile gadi --pipelines somatic_neoantigen,gene_fusion ..
 
 Leave `--pipelines` unset to keep controlling each branch with its own
 `--run_*` flag, exactly as before — nothing changes for existing invocations.
+
+### Splicing peptide candidates
+
+DNA WES/WGS somatic VCF → SpliceAI → predicted splice junctions, combined
+with RNA LeafCutter junction evidence from **any timepoint**, then splice2neo
+transcript/CDS annotation and peptide-context prediction. GENCODE and a
+supplied normal/GTEx junction panel exclude known junctions. These are
+research candidates, not HLA-ranked or validated neoantigens.
+
+Use `--pipelines splicing` with supplied DNA VCFs, or
+`--pipelines dna_variant_calling,splicing` to call somatic variants first.
+Existing annotated `spliceai_vcf` and strand-aware `leafcutter_counts`
+are also supported. See [setup and input examples](docs/SPLICING.md).
 
 ### Gene fusion calling
 

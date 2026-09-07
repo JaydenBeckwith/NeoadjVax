@@ -9,6 +9,12 @@ all but one — `patient_id` is the join key between the two.
 
 ## `--dna_samplesheet`
 
+Splicing accepts one `spliceai_vcf` (already annotated) or `dna_vcf`
+(somatic, PASS calls) per patient; `spliceai_vcf` takes precedence within
+splicing only. Raw tumour/normal inputs work with
+`--pipelines dna_variant_calling,splicing`. No HLA alleles are required for
+splicing peptide-context generation. See [SPLICING.md](../docs/SPLICING.md).
+
 The optional ERVcaller DNA branch also uses this sheet. Standalone
 `--pipelines erv_dna` requires `patient_id,tumor_bam,normal_bam`, with
 coordinate-sorted BAMs and adjacent `.bam.bai` or `.bai` indices. Patient IDs
@@ -76,13 +82,22 @@ row is missing everything a given stage needs.
 
 ## `--rna_samplesheet`
 
+For splicing, supply `rna_bam` (coordinate-sorted, unsplit, with NH tags),
+paired FASTQs, or `leafcutter_counts`. BAM rows require `rna_strand`:
+`XS` (aligner tags), `RF` (first-strand) or `FR` (second-strand), with
+`--splicing_rna_strand` as a cohort fallback. Existing LeafCutter matrices
+use `leafcutter_sample` to select the exact sample column; it is required
+for a multi-sample matrix. RNA VCFs cannot provide splice-junction evidence.
+Every patient/timepoint pair must be unique and match a DNA patient.
+Timepoint labels are arbitrary; no PRE/ED1/ED2/CLND ordering is enforced.
+
 Same three tiers as DNA, per patient-timepoint: FASTQ, already-aligned BAM,
 or already-called VCF.
 
 | column        | required                     | notes                                                              |
 |---------------|-------------------------------|---------------------------------------------------------------------|
 | patient_id    | yes                            | join key back to the DNA sheet                                      |
-| timepoint     | yes                            | e.g. `PRE`, `ED1`, `ED2`, `CLND` — matches the ordering logic in the original RNA PBS script |
+| timepoint     | yes                            | any label, e.g. `PRE`, `day99`, `resection`; not restricted to a predefined sequence |
 | rna_bam       | if no rna_fastq_* and no rna_vcf | pre-aligned RNA-seq BAM, as consumed by the original RNA script — realigned with STAR two-pass unless `--rna_skip_realignment true` |
 | rna_fastq_r1  | alt. to rna_bam, if no rna_vcf | use if starting from FASTQ instead of BAM                          |
 | rna_fastq_r2  | alt. to rna_bam, if no rna_vcf |                                                                       |
