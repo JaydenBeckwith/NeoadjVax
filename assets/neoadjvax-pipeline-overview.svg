@@ -5,20 +5,22 @@
 :root {
   --bg: #ffffff;
   --ink: #20303d;
-  --muted: #566774;
-  --todo: #8b5143;
+  --heading: #b45309;
+  --muted: #b93f35;
+  --todo: #b93f35;
   --divider: #dbe2e7;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0d1117;
     --ink: #e6edf3;
-    --muted: #9aa7b2;
-    --todo: #e2917f;
+    --heading: #fb923c;
+    --muted: #f87171;
+    --todo: #f87171;
     --divider: #30363d;
   }
 }
-text {font-family:Arial,Helvetica,sans-serif;fill:var(--ink)}
+text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 .title {font-size:38px;font-weight:700}
 .subtitle {font-size:20px;fill:var(--muted)}
 .section {font-size:18px;font-weight:700;letter-spacing:1.5px}
@@ -33,7 +35,7 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--ink)}
 .ink-fill {fill:var(--ink)}
 .ink-stroke {stroke:var(--ink)}
 </style>
-<rect width="1600" height="2010" fill="var(--bg)"/>
+<!-- Transparent canvas; station fills remain theme-aware to mask the tracks. -->
 <text x="70" y="65" class="title" text-anchor="start">NeoadjVax workflow map</text>
 <text x="70" y="101" class="subtitle" text-anchor="start">Nextflow DSL2 / melanoma neoantigen discovery</text>
 <text x="1530" y="65" class="small" text-anchor="end">READ LEFT TO RIGHT</text>

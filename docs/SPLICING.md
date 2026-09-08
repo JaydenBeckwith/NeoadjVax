@@ -174,6 +174,19 @@ The actual upstream clusterer can also be tested with
 using the pinned commit above. It verifies both strands, coordinate offsets,
 read counts and the upstream `-m` threshold behaviour.
 
+### Verification status
+
+Checked locally on 8 September 2026: 31 Python regression tests; real
+splice2neo 0.6.14 translation on both strands, canonical/normal exclusions
+and empty/no-CDS cases; and the pinned upstream LeafCutter clusterer on
+synthetic BED12 junctions, including its per-junction read cutoff.
+
+Full Nextflow orchestration (including the stub run), the fresh SpliceAI,
+STAR and RegTools binaries, the custom container build and real-data
+validation have not been executed here. Run the Linux/Gadi smoke test and
+a reference-matched pilot before production use. The README SVG was also
+checked for label overlap/clipping in light and dark modes; its canvas is transparent.
+
 ## Methods
 
 See the [splice2neo workflow/API](https://tron-bioinformatics.github.io/splice2neo/articles/splice2neo_workflow.html),
