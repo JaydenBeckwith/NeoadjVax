@@ -1,0 +1,2 @@
+patient_id,timepoint,rna_bam,rna_fastq_r1,rna_fastq_r2,rna_vcf,hla_alleles,starfusion_tsv,arriba_tsv
+P1,PRE,,tests/fusion/rna_R1.fastq,tests/fusion/rna_R2.fastq,,HLA-A*02:01|HLA-B*07:02,tests/fusion/starfusion_calls.tsv,

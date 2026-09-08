@@ -87,4 +87,5 @@ workflow PVACSEQ_CORE {
     emit:
     pvacseq_results = PVACSEQ_RUN.out.results
     rna_support_summary = RNA_SUPPORT_FILTER.out.summary
+    hla_by_patient = hla_by_patient_ch
 }

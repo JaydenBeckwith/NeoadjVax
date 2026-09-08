@@ -23,13 +23,14 @@ process ARRIBA_STAR_ALIGN {
     tuple val(meta), path("${meta.id}_${meta.timepoint}.arriba.Aligned.out.bam"), emit: bam
 
     script:
+    def read_command = r1.name.endsWith('.gz') ? 'zcat' : 'cat'
     """
     STAR \\
         --runThreadN ${task.cpus} \\
-        --genomeDir ${star_index_dir} \\
+        --genomeDir '${star_index_dir}' \\
         --genomeLoad NoSharedMemory \\
-        --readFilesIn ${r1} ${r2} \\
-        --readFilesCommand zcat \\
+        --readFilesIn '${r1}' '${r2}' \\
+        --readFilesCommand ${read_command} \\
         --outSAMtype BAM Unsorted \\
         --outSAMunmapped Within \\
         --outBAMcompression 0 \\
@@ -46,5 +47,10 @@ process ARRIBA_STAR_ALIGN {
         --chimSegmentReadGapMax 3 \\
         --chimMultimapNmax 50 \\
         --outFileNamePrefix ${meta.id}_${meta.timepoint}.arriba.
+    """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.arriba.Aligned.out.bam
     """
 }

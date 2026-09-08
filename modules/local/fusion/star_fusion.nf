@@ -29,4 +29,11 @@ process STAR_FUSION {
         --CPU ${task.cpus} \\
         --output_dir star_fusion_out
     """
+
+    stub:
+    """
+    mkdir -p star_fusion_out
+    printf '#FusionName\\tLeftGene\\tRightGene\\tLeftBreakpoint\\tRightBreakpoint\\tJunctionReadCount\\tSpanningFragCount\\tFFPM\\n' > star_fusion_out/star-fusion.fusion_predictions.abridged.tsv
+    printf 'Stub run: no biological analysis performed.\\n' > star_fusion_out/stub.log
+    """
 }

@@ -134,6 +134,14 @@ rows are not usable for fusion calling (there's no variant file fusion
 callers can start from): a row with only `rna_vcf` set contributes to
 `PVACSEQ_CORE` but is skipped by the fusion branch.
 
+Two further optional columns feed the fusion branch specifically:
+`starfusion_tsv` and `arriba_tsv`. Set one to a caller's own already-called
+native output TSV to bypass that caller's dedicated STAR pass and calling
+step for that row entirely; whichever caller is left without a TSV still
+runs from `rna_bam`/`rna_fastq_r1`+`rna_fastq_r2` as usual. See
+[`docs/FUSION.md`](../docs/FUSION.md) for the full fusion-branch samplesheet
+and HLA-sourcing behaviour.
+
 Same story again for `--run_erv_neoantigens` (`workflows/erv_neoantigens.nf`):
 `rna_bam` (via `BAM_TO_FASTQ`) and `rna_fastq_r1`/`rna_fastq_r2` rows both
 work, each realigned through the branch's own dedicated STAR pass (relaxed

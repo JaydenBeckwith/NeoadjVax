@@ -5,7 +5,7 @@ vaccine development.
 
 Orchestrated with Nextflow DSL2. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 for the full pipeline design, a diagram of how the branches fit together,
-and the remaining open decisions for fusion/ERV peptide generation.
+and the remaining open decisions for ERV peptide generation.
 Splicing now combines DNA SpliceAI and RNA LeafCutter with splice2neo
 peptide-context prediction; see [the splicing guide](docs/SPLICING.md). See
 [`docs/RUNNING_ON_GADI.md`](docs/RUNNING_ON_GADI.md) for how to actually
@@ -44,7 +44,7 @@ images, HLA/pVACseq settings, per-branch on/off switches).
 | `run_rna_variant_calling` | Ported from the original RNA PBS script, default on |
 | `run_pvacseq_core` | New RNA-support matching + pVACseq, default on |
 | `run_splicing_neoantigens` | Optional DNA SpliceAI + RNA LeafCutter → splice2neo peptide contexts; GENCODE/normal filtering. See [splicing guide](docs/SPLICING.md) |
-| `run_fusion_neoantigens` | New, default off: STAR-Fusion + Arriba calling is real (`--fusion_callers`), AGFusion annotation downstream is still a stub |
+| `run_fusion_neoantigens` | New, default off: STAR-Fusion + Arriba calling, AGFusion annotation and pVACfuse binding prediction are all real; see [fusion guide](docs/FUSION.md) |
 | `run_erv_neoantigens` | New, default off: ERV/TE quantification (own STAR pass + Telescope) is real, peptide step is a stub |
 | `run_erv_dna` | Optional ERVcaller v1.4 insertion calling on tumour/normal DNA BAMs; separate from RNA expression and peptide prediction |
 | `run_purity_ploidy` | Fully ported from `Sequenza_tools`, default off: WGS/200bp bins only (WES errors at launch, see `docs/ARCHITECTURE.md`) |
@@ -106,14 +106,15 @@ are also supported. See [setup and input examples](docs/SPLICING.md).
 patient-timepoint. Each caller runs its own dedicated STAR alignment pass:
 STAR-Fusion needs its own CTAT genome resource lib (`--ctat_resource_lib`),
 Arriba needs relaxed multimapping plus chimeric-alignment flags: and their
-results are kept separate all the way through rather than merged, tagged and
-published to per-caller subdirectories. The samplesheet's `rna_bam` or
-`rna_fastq_r1`/`rna_fastq_r2` columns both work as input. AGFusion
-annotation downstream of either caller is still a stub pending
-`agfusion-build` against the reference GTF, so `pvacfuse` can't run
-end-to-end on fusion calls yet: see `docs/ARCHITECTURE.md` for the full
-picture, including the Arriba reference-file (`--arriba_blacklist` etc.) and
-container-tag caveats.
+results are kept separate all the way through, tagged and published to
+per-caller subdirectories, rather than merged into one consensus call set.
+The samplesheet's `rna_bam`/`rna_fastq_r1`+`rna_fastq_r2` columns, or a
+caller's own precomputed `starfusion_tsv`/`arriba_tsv`, both work as input.
+AGFusion annotation and pVACfuse binding prediction downstream of either
+caller are real end-to-end, not stubs: see [the fusion guide](docs/FUSION.md)
+for exact CLI usage, the AGFusion database-release caveat (GENCODE v46 needs
+a built, not downloaded, database), the now-mandatory Arriba blacklist, and
+HLA-sourcing options.
 
 ### ERV/transposable-element calling
 

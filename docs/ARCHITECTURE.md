@@ -3,7 +3,9 @@
 Neoadjuvant melanoma vaccine neoantigen pipeline: DNA + RNA variant calling
 feeding pVACseq (the part with an existing design: see
 `[[neoantigen-score]]`), three new discovery branches: splicing,
-gene fusion, and ERV neoantigens: scaffolded at roughly equal depth, and
+gene fusion, and ERV neoantigens (gene fusion now runs end to end, calling
+through AGFusion annotation to pVACfuse; splicing and ERV still stop short
+of HLA-ranked peptides, see Open decisions below), and
 two further optional, independently-runnable branches: tumor
 purity/ploidy (Sequenza, `--run_purity_ploidy`, fully ported from
 `Sequenza_tools`, WGS/200bp bins only) and HLA loss-of-heterozygosity
@@ -93,7 +95,7 @@ flowchart TB
     subgraph FUSION["fusion_neoantigens.nf: --fusion_callers"]
         f0["RNA FASTQ (direct or BAM→FASTQ)"] --> f1a["STAR-Fusion<br/>(own STAR pass, CTAT lib)"]
         f0 --> f1b["Arriba<br/>(own STAR pass, relaxed multimap)"]
-        f1a --> f2["AGFusion annotate: TODO,<br/>per caller"]
+        f1a --> f2["AGFusion annotate<br/>per caller"]
         f1b --> f2
         f2 --> f3["pVACfuse, per caller"]
     end
@@ -168,34 +170,49 @@ choice it needed to make.
   Leave `--pipelines` unset to keep controlling each branch with its own
   flag, exactly as before: nothing changes for existing invocations. See
   `README.md` for the full name table.
-- **Gene fusion calling, for real** (`modules/local/fusion/star_fusion.nf`,
-  `arriba_align.nf`, `arriba.nf`): `--fusion_callers` (default
-  `starfusion,arriba`, comma-separated) runs either or both in parallel per
-  patient-timepoint, each tagged through the rest of the branch so results
-  don't collide. STAR-Fusion and Arriba each run their **own** STAR pass:
-  they're not sharing one alignment, and neither reuses
-  `RNA_VARIANT_CALLING`'s BAM: STAR-Fusion's wrapper needs the CTAT genome
-  lib's own bundled index, and Arriba needs relaxed multimapping
-  (`--outFilterMultimapNmax 50`) plus a specific set of chimeric-alignment
-  flags copied verbatim from Arriba's own documented quickstart: both
-  incompatible with the RNA branch's `--outFilterMultimapNmax 2` two-pass
-  settings. This also resolves the old "fusion branch's FASTQ source" open
-  decision: the branch now consumes `rna_bam` samplesheet rows too (via
-  `RNA_VARIANT_CALLING`'s own `BAM_TO_FASTQ` module, reused rather than
-  duplicated), not just `rna_fastq_r1/r2`. What's still a stub: AGFusion
-  annotation downstream of either caller (needs `agfusion-build` run
-  against our GENCODE v46 GTF first: a real prerequisite, not done yet),
-  so `pvacfuse` can't actually run on fusion calls end-to-end today even
-  though the calling step itself is real. Also worth a look: the Arriba
-  container tag (`2.5.1--h87b9561_0`) was confirmed via bioconda's build
-  string and a partial-fetch check against the depot mirror rather than a
-  full browser-verified pull: high confidence, worth a one-off
-  `singularity pull` sanity check before relying on it in production. And
-  Arriba's blacklist/known-fusions/protein-domains reference files
-  (`--arriba_blacklist`/`--arriba_known_fusions`/`--arriba_protein_domains`)
-  are unset by default: Arriba runs without them (its own docs say so),
-  just with more false-positive calls; fetch them via Arriba's own bundled
+- **Gene fusion calling, for real, end to end** (`modules/local/fusion/star_fusion.nf`,
+  `arriba_align.nf`, `arriba.nf`, `agfusion_annotate.nf`,
+  `modules/local/pvactools/pvacfuse.nf`, `bin/fusion_tools.py`):
+  `--fusion_callers` (default `starfusion,arriba`, comma-separated) runs
+  either or both in parallel per patient-timepoint, each tagged through the
+  rest of the branch so results don't collide. STAR-Fusion and Arriba each
+  run their **own** STAR pass: they're not sharing one alignment, and
+  neither reuses `RNA_VARIANT_CALLING`'s BAM: STAR-Fusion's wrapper needs
+  the CTAT genome lib's own bundled index, and Arriba needs relaxed
+  multimapping (`--outFilterMultimapNmax 50`) plus a specific set of
+  chimeric-alignment flags copied verbatim from Arriba's own documented
+  quickstart: both incompatible with the RNA branch's
+  `--outFilterMultimapNmax 2` two-pass settings. This also resolves the old
+  "fusion branch's FASTQ source" open decision: the branch consumes
+  `rna_bam` samplesheet rows too (via `RNA_VARIANT_CALLING`'s own
+  `BAM_TO_FASTQ` module, reused rather than duplicated), not just
+  `rna_fastq_r1/r2`, plus each caller's own precomputed native TSV
+  (`starfusion_tsv`/`arriba_tsv`) to bypass calling entirely for a row.
+  AGFusion annotation and pVACfuse binding prediction downstream of either
+  caller are real, not stubs: `bin/fusion_tools.py` wraps both tools'
+  documented CLIs (`agfusion batch ... --middlestar` then
+  `pvacfuse run ...`), with 20 passing unit tests
+  (`tests/test_fusion_tools.py`) covering input validation, command
+  construction and failure modes. The real prerequisite that remains is
+  the AGFusion database itself: AGFusion's pre-built downloadable databases
+  only cover Ensembl releases up to 92, and this pipeline's GENCODE v46 GTF
+  is Ensembl release 112, so the database has to be built
+  (`agfusion build -s homo_sapiens -r 112 --pfam ...`) rather than
+  downloaded; see [the fusion guide](FUSION.md) for the exact commands.
+  Also worth a look: the Arriba container tag (`2.5.1--h87b9561_0`) was
+  confirmed via bioconda's build string and a partial-fetch check against
+  the depot mirror rather than a full browser-verified pull: high
+  confidence, worth a one-off `singularity pull` sanity check before
+  relying on it in production. Arriba's blacklist is now a mandatory
+  parameter (`--arriba_blacklist`, launch validation fails without it): a
+  missing blacklist is not an innocuous default for candidate discovery,
+  unlike the still-optional `--arriba_known_fusions`/
+  `--arriba_protein_domains`; fetch all three via Arriba's own bundled
   `download_references.sh hg38+GENCODE46` before trusting real output.
+  Every one of the five fusion processes now has a `stub:` block and the
+  branch has its own `-stub-run` smoke test
+  (`tests/fusion/smoke.nf`/`smoke.config`), matching the convention already
+  used by the splicing and ERV-DNA branches.
 - **ERV calling, for real** (`modules/local/erv/erv_star_align.nf`,
   `collate_bam.nf`, `telescope_quant.nf`): researched tool choice rather
   than just carrying forward the original stub's assumption: Telescope
@@ -410,7 +427,7 @@ top-solution extraction (`sequenza_extract_top_solution.nf`: new code, not
 a port, see the caveat above).
 
 **Explicit TODO stubs** (exit 1, comment explains the decision needed):
-ERV→peptide, AGFusion annotation.
+ERV→peptide.
 
 **Unverified detail worth a one-off sanity check**: xHLA's in-container
 entrypoint (`python /opt/bin/run.py`) and image tag (`0.0.0`) are both
@@ -431,9 +448,10 @@ command in that param block's comment before a real run.
    (`--run_splicing_neoantigens false --run_fusion_neoantigens false
    --run_erv_neoantigens false`) before touching the new branches.
 3. Validate the splicing integration on a reference-matched pilot sample
-   and choose an ERV peptide-generation approach. The fusion branch's
-   remaining gap (AGFusion) isn't a design decision, just a prerequisite not
-   yet done: see item 7 below.
+   and choose an ERV peptide-generation approach (item 2 above). The fusion
+   branch has no remaining design gap: its remaining prerequisite is
+   building the AGFusion database for GENCODE v46/Ensembl 112, see item 7
+   below.
 4. Confirm `--sequenza_conda_sh` / `--sequenza_conda_bin_fallback` point at
    wherever the `r_sequenza` conda env actually lives: the defaults are
    copied from a personal Gadi home directory (`/home/562/jb1592/...`) in
@@ -453,14 +471,17 @@ command in that param block's comment before a real run.
    names resolve the way you expect before relying on it for a full run:
    see `README.md` for the full name table.
 7. Before trusting real fusion-calling output: run Arriba's own
-   `download_references.sh hg38+GENCODE46` and set
-   `--arriba_blacklist`/`--arriba_known_fusions`/`--arriba_protein_domains`
-   (Arriba runs without them, just with more false positives per its own
-   docs); do a one-off `singularity pull` on the Arriba container tag to
-   confirm it (see `nextflow.config`'s comment on it); and note the
-   AGFusion step downstream of both callers is still a stub pending
-   `agfusion-build` against the GENCODE v46 GTF, so `pvacfuse` on fusion
-   calls doesn't run end-to-end yet even though calling itself is real.
+   `download_references.sh hg38+GENCODE46`, set the now-mandatory
+   `--arriba_blacklist` (plus the still-optional
+   `--arriba_known_fusions`/`--arriba_protein_domains`); do a one-off
+   `singularity pull` on the Arriba container tag to confirm it (see
+   `nextflow.config`'s comment on it); and build the AGFusion database for
+   Ensembl release 112 (`agfusion build -s homo_sapiens -r 112 --pfam ...`,
+   since the pre-built downloadable databases only reach release 92) before
+   `--run_fusion_neoantigens` can produce real AGFusion/pVACfuse output: see
+   [`docs/FUSION.md`](FUSION.md) for the exact commands. Calling, AGFusion
+   annotation and pVACfuse prediction are all real code paths already;
+   `agfusion build` is a one-off setup step, not a missing feature.
 8. Before trusting real ERV-calling output: download one of Telescope's
    official annotation builds (`mlbendall/telescope_annotation_db`:
    `retro.hg38.v1` recommended) and point `--erv_annotation_gtf` at it; do a

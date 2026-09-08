@@ -26,26 +26,30 @@ process ARRIBA {
     tuple val(meta), path(bam)
     path fasta
     path gtf
+    path blacklist, stageAs: 'blacklist/*'
+    path known_fusions, stageAs: 'known_fusions/*'
+    path protein_domains, stageAs: 'protein_domains/*'
 
     output:
     tuple val(meta), val('arriba'), path("${meta.id}_${meta.timepoint}.arriba_fusions.tsv"), emit: fusions
     path "${meta.id}_${meta.timepoint}.arriba_fusions.discarded.tsv", emit: discarded
 
     script:
-    def blacklist_opt = params.arriba_blacklist ? "-b ${params.arriba_blacklist}" : ''
-    def known_fusions_opt = params.arriba_known_fusions ? "-k ${params.arriba_known_fusions}" : ''
-    def protein_domains_opt = params.arriba_protein_domains ? "-p ${params.arriba_protein_domains}" : ''
+    def known_fusions_opt = known_fusions ? "-k '${known_fusions}'" : ''
+    def protein_domains_opt = protein_domains ? "-p '${protein_domains}'" : ''
     """
-    if [ -z "${params.arriba_blacklist}" ]; then
-        echo "WARNING: --arriba_blacklist not set: running Arriba without a blacklist, which Arriba's own docs say increases false-positive fusion calls. Run Arriba's download_references.sh for your assembly+annotation build and set --arriba_blacklist before trusting real results." >&2
-    fi
-
     arriba \\
-        -x ${bam} \\
+        -x '${bam}' \\
         -o ${meta.id}_${meta.timepoint}.arriba_fusions.tsv \\
         -O ${meta.id}_${meta.timepoint}.arriba_fusions.discarded.tsv \\
-        -a ${fasta} \\
-        -g ${gtf} \\
-        ${blacklist_opt} ${known_fusions_opt} ${protein_domains_opt}
+        -a '${fasta}' \\
+        -g '${gtf}' \\
+        -b '${blacklist}' ${known_fusions_opt} ${protein_domains_opt}
+    """
+
+    stub:
+    """
+    printf '#gene1\\tgene2\\tgene_id1\\tgene_id2\\tbreakpoint1\\tbreakpoint2\\tsplit_reads1\\tsplit_reads2\\tdiscordant_mates\\n' > ${meta.id}_${meta.timepoint}.arriba_fusions.tsv
+    printf '#gene1\\tgene2\\tgene_id1\\tgene_id2\\tbreakpoint1\\tbreakpoint2\\tsplit_reads1\\tsplit_reads2\\tdiscordant_mates\\n' > ${meta.id}_${meta.timepoint}.arriba_fusions.discarded.tsv
     """
 }

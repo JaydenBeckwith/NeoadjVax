@@ -1,32 +1,35 @@
-// TODO stub: annotates a caller's fusion predictions into the
-// fusion-transcript format pVACfuse needs (a "AGFusion"-annotated
-// directory per fusion event: context sequence + breakpoint + reading
-// frame). AGFusion is the tool pVACtools' own docs point at for this, and
-// its `agfusion batch -f <format>` command documents support for both
-// callers now feeding it (`-f starfusion` / `-f arriba`), so this module
-// is written caller-aware even though it's still a stub: the blocker
-// hasn't changed: AGFusion's local annotation database (agfusion-build)
-// needs to be built once against our GENCODE v46 GTF before this can run
-// for real, and that hasn't been done. STAR-Fusion and Arriba themselves
-// (the actual fusion-CALLING step upstream of this) are real as of this
-// scaffold: see star_fusion.nf / arriba_align.nf / arriba.nf.
-
+// AGFusion 1.5.0: native caller TSV -> transcript/CDS/protein/exon annotations.
+// --middlestar is essential for pVACfuse to locate the fusion junction.
 process AGFUSION_ANNOTATE {
     tag "${meta.id}:${meta.timepoint}:${caller}"
     label 'process_medium'
+    container params.agfusion_container
+    publishDir "${params.outdir}/${meta.id}/fusion/${meta.timepoint}/${caller}", mode: 'copy'
+    // PyEnsembl lazily writes indexes/pickles. Use a task-local copy, never
+    // mutate a shared cache concurrently across patients or timepoints.
+    stageInMode 'copy'
 
     input:
-    tuple val(meta), val(caller), path(fusion_file)
+    tuple val(meta), val(caller), path(fusion_file, stageAs: 'caller/*')
+    path database, stageAs: 'reference/*'
+    path cache, stageAs: 'pyensembl_cache'
 
     output:
-    tuple val(meta), val(caller), path("agfusion_out"), emit: annotated
+    tuple val(meta), val(caller), path('agfusion_out'), emit: annotated
 
     script:
+    def noncanonical = params.agfusion_noncanonical ? '--noncanonical' : ''
     """
-    # TODO: unverified. Rough shape per pVACtools/AGFusion docs:
-    #   agfusion batch -f ${fusion_file} -a ${caller} \\
-    #       -db agfusion.homo_sapiens.87.db -o agfusion_out
-    echo "AGFUSION_ANNOTATE is a stub for ${meta.id}:${meta.timepoint} (${caller}): needs agfusion-build run against our GTF first" >&2
-    exit 1
+    python ${projectDir}/bin/fusion_tools.py annotate \\
+        --input '${fusion_file}' --caller '${caller}' \\
+        --database '${database}' --cache '${cache}' \\
+        --min-reads ${params.fusion_min_read_support} --min-ffpm ${params.fusion_min_ffpm} \\
+        ${noncanonical} --output agfusion_out
+    """
+
+    stub:
+    """
+    mkdir -p agfusion_out
+    printf '{"stub": true, "caller": "${caller}", "status": "no_fusions"}\\n' > agfusion_out/annotation_qc.json
     """
 }

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2010" viewBox="0 0 1600 2010" role="img" aria-labelledby="title desc">
 <title id="title">NeoadjVax workflow map</title>
-<desc id="desc">Metromap of nine Nextflow branches. DNA and RNA variant calling feed RNA-support filtering, VEP and pVACseq, with HLA alleles supplied separately. RNA can be from any timepoint. The splicing route combines DNA WES/WGS SpliceAI predictions and RNA LeafCutter junction evidence in splice2neo, excludes GENCODE and normal-panel junctions, and generates CDS/ORF peptide contexts without HLA ranking. Fusion and RNA ERV peptide stages remain unfinished. ERVcaller produces separate DNA insertion evidence for tumour and normal. Sequenza purity and ploidy can feed SpecHLA HLA-LOH analysis. Repeated input stations denote the same input types, not dependencies between lanes.</desc>
+<desc id="desc">Metromap of nine Nextflow branches. DNA and RNA variant calling feed RNA-support filtering, VEP and pVACseq, with HLA alleles supplied separately. RNA can be from any timepoint. The splicing route combines DNA WES/WGS SpliceAI predictions and RNA LeafCutter junction evidence in splice2neo, excludes GENCODE and normal-panel junctions, and generates CDS/ORF peptide contexts without HLA ranking. Fusion calling runs end to end through AGFusion annotation and pVACfuse binding prediction; only the RNA ERV peptide stage remains unfinished. ERVcaller produces separate DNA insertion evidence for tumour and normal. Sequenza purity and ploidy can feed SpecHLA HLA-LOH analysis. Repeated input stations denote the same input types, not dependencies between lanes.</desc>
 <style>
 :root {
   --bg: #ffffff;
@@ -79,7 +79,7 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <text x="70" y="590" class="section" text-anchor="start">02  OPTIONAL DISCOVERY ROUTES</text>
 <path d="M100 715 H360 Q390 715 410 695 L420 685 Q440 665 470 665 H665 Q695 665 715 685 L725 695 Q745 715 775 715 H810" class="track " stroke="#ec8950"/>
 <path d="M360 715 Q390 715 410 735 L420 745 Q440 765 470 765 H665 Q695 765 715 745 L725 735 Q745 715 775 715" class="track " stroke="#ec8950"/>
-<path d="M810 715 H1500" class="track pending" stroke="#9ba5af"/>
+<path d="M810 715 H1500" class="track " stroke="#ec8950"/>
 <text x="205" y="654" class="label" text-anchor="middle">RNA FASTQ / BAM</text>
 <text x="205" y="682" class="note" text-anchor="middle">Any timepoint</text>
 <path d="M93 705h10l9 10-9 10h-10z" class="ink-fill"/>
@@ -87,15 +87,15 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <text x="560" y="635" class="label" text-anchor="middle">STAR-Fusion</text>
 <circle cx="560" cy="765" r="11" class="station"/>
 <text x="560" y="805" class="label" text-anchor="middle">Arriba</text>
-<circle cx="920" cy="715" r="11" class="station" stroke-dasharray="4 3"/>
+<circle cx="920" cy="715" r="11" class="station"/>
 <text x="920" y="654" class="label" text-anchor="middle">AGFusion</text>
-<text x="920" y="682" class="todo" text-anchor="middle">TODO: annotation</text>
+<text x="920" y="682" class="note" text-anchor="middle">Transcript / CDS / protein annotation</text>
 <circle cx="1220" cy="715" r="11" class="station"/>
 <text x="1220" y="654" class="label" text-anchor="middle">pVACfuse</text>
-<text x="1220" y="682" class="todo" text-anchor="middle">Awaiting AGFusion output</text>
+<text x="1220" y="682" class="note" text-anchor="middle">MHC binding prediction</text>
 <path d="M1500 702v26" class="ink-stroke" stroke-width="6"/>
 <text x="1500" y="754" class="label" text-anchor="end">Fusion candidates</text>
-<text x="1500" y="781" class="todo" text-anchor="end">Downstream steps unfinished</text>
+<text x="1500" y="781" class="note" text-anchor="end">Per caller, HLA-ranked</text>
 <text x="560" y="835" class="small" text-anchor="middle">Each caller uses its own alignment</text>
 <text x="920" y="805" class="small" text-anchor="middle">Caller outputs kept separate</text>
 <!-- Splicing: two independent input routes, one patient-specific intersection. -->

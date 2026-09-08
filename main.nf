@@ -144,7 +144,7 @@ include { DNA_VARIANT_CALLING }  from './workflows/dna_variant_calling'
 include { RNA_VARIANT_CALLING }  from './workflows/rna_variant_calling'
 include { PVACSEQ_CORE }         from './workflows/pvacseq_core'
 include { SPLICING_NEOANTIGENS; validateSplicingSamplesheets } from './workflows/splicing_neoantigens'
-include { FUSION_NEOANTIGENS }   from './workflows/fusion_neoantigens'
+include { FUSION_NEOANTIGENS; validateFusionInputs } from './workflows/fusion_neoantigens'
 include { ERV_NEOANTIGENS }      from './workflows/erv_neoantigens'
 include { ERV_DNA; validateErvDnaSamplesheet } from './workflows/erv_dna'
 include { PURITY_PLOIDY }        from './workflows/purity_ploidy'
@@ -176,8 +176,7 @@ workflow {
         params.run_splicing_neoantigens || params.run_fusion_neoantigens ||
         params.run_erv_neoantigens) {
         if (!params.rna_samplesheet) error "Please provide --rna_samplesheet (see assets/samplesheet_schema.md)"
-        if (!params.run_splicing_neoantigens || params.run_rna_variant_calling || params.run_pvacseq_core ||
-            params.run_fusion_neoantigens || params.run_erv_neoantigens) {
+        if (params.run_rna_variant_calling || params.run_pvacseq_core || params.run_erv_neoantigens) {
             validateRnaSamplesheet(params.rna_samplesheet)
         }
         rna_samplesheet_ch = Channel.fromPath(params.rna_samplesheet).splitCsv(header: true)
@@ -186,11 +185,16 @@ workflow {
     if (params.run_splicing_neoantigens) {
         validateSplicingSamplesheets(params.dna_samplesheet, params.rna_samplesheet, params.run_dna_variant_calling, params)
     }
+    fusion_settings = [:]
+    if (params.run_fusion_neoantigens) {
+        fusion_settings = validateFusionInputs(params.rna_samplesheet, params.dna_samplesheet, params.run_pvacseq_core, params)
+    }
 
     dna_variants_ch   = Channel.empty()
     dna_normal_bam_ch = Channel.empty()
     dna_tumor_bam_ch  = Channel.empty()
     rna_variants_ch   = Channel.empty()
+    core_hla_ch       = Channel.empty()
 
     if (params.run_dna_variant_calling) {
         DNA_VARIANT_CALLING(dna_samplesheet_ch)
@@ -209,6 +213,7 @@ workflow {
             error "--run_pvacseq_core needs both --run_dna_variant_calling and --run_rna_variant_calling (the core neoantigen score is baseline DNA calls filtered for per-timepoint RNA support)"
         }
         PVACSEQ_CORE(dna_samplesheet_ch, dna_variants_ch, dna_normal_bam_ch, rna_variants_ch)
+        core_hla_ch = PVACSEQ_CORE.out.hla_by_patient
     }
 
     if (params.run_splicing_neoantigens) {
@@ -216,7 +221,7 @@ workflow {
     }
 
     if (params.run_fusion_neoantigens) {
-        FUSION_NEOANTIGENS(rna_samplesheet_ch)
+        FUSION_NEOANTIGENS(rna_samplesheet_ch, core_hla_ch, fusion_settings)
     }
 
     if (params.run_erv_neoantigens) {
