@@ -66,4 +66,11 @@ process HLA_TYPING_XHLA {
     HLA_ALLELES=\$(cat pvacseq_hla_alleles.txt)
     echo "[INFO] \${HLA_ALLELES}"
     """
+
+    stub:
+    """
+    mkdir -p xhla_out
+    printf '{"stub":true}\\n' > xhla_out/report-${meta.id}-hla.json
+    HLA_ALLELES="HLA-A*02:01,HLA-B*07:02"
+    """
 }

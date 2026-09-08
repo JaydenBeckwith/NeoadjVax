@@ -26,4 +26,9 @@ process RNA_SUPPORT_FILTER {
         --min-rna-alt-reads ${min_reads} \\
         --summary ${meta.id}_${meta.timepoint}.rna_support_summary.tsv
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.rna_supported.vcf ${meta.id}_${meta.timepoint}.rna_support_summary.tsv
+    """
 }

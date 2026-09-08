@@ -24,4 +24,9 @@ process MUTECT2 {
         -I ${normal_bam} -normal normal \\
         -O ${meta.id}_raw.vcf.gz
     """
+
+    stub:
+    """
+    touch ${meta.id}_raw.vcf.gz ${meta.id}_raw.vcf.gz.stats
+    """
 }

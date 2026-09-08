@@ -21,6 +21,11 @@ process SAMTOOLS_FAIDX {
         samtools faidx ${fasta}
     fi
     """
+
+    stub:
+    """
+    touch ${fasta}.fai
+    """
 }
 
 process PICARD_CREATE_SEQUENCE_DICTIONARY {
@@ -37,5 +42,10 @@ process PICARD_CREATE_SEQUENCE_DICTIONARY {
     script:
     """
     picard CreateSequenceDictionary R=${fasta} O=${fasta.baseName}.dict
+    """
+
+    stub:
+    """
+    touch ${fasta.baseName}.dict
     """
 }

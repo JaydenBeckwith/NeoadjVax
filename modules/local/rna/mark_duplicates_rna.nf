@@ -21,4 +21,9 @@ process MARK_DUPLICATES_RNA {
         CREATE_INDEX=true \\
         VALIDATION_STRINGENCY=SILENT
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.dupMarked.bam ${meta.id}_${meta.timepoint}.dup.metrics
+    """
 }

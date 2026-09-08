@@ -27,4 +27,10 @@ process PVACSEQ_RUN {
         pvacseq_output \\
         -t ${task.cpus}
     """
+
+    stub:
+    """
+    mkdir -p pvacseq_output
+    printf 'Stub run: no biological analysis performed.\\n' > pvacseq_output/stub.log
+    """
 }

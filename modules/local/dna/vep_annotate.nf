@@ -36,4 +36,9 @@ process VEP_ANNOTATE {
         --compress_output bgzip \\
         --fork ${task.cpus}
     """
+
+    stub:
+    """
+    touch ${meta.id}.annotated.vcf.gz
+    """
 }

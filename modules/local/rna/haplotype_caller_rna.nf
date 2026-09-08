@@ -29,4 +29,9 @@ process HAPLOTYPE_CALLER_RNA {
         --dont-use-soft-clipped-bases \\
         --native-pair-hmm-threads ${task.cpus}
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.raw.vcf
+    """
 }

@@ -31,4 +31,10 @@ process STAR_INDEX {
             --runThreadN ${task.cpus}
     fi
     """
+
+    stub:
+    """
+    mkdir -p star_index
+    touch star_index/SA
+    """
 }

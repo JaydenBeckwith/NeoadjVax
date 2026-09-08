@@ -24,4 +24,9 @@ process MARK_DUPLICATES {
 
     samtools index ${meta.id}.${sample_type}.dedup.bam
     """
+
+    stub:
+    """
+    touch ${meta.id}.${sample_type}.dedup.bam ${meta.id}.${sample_type}.dedup.bam.bai ${meta.id}.${sample_type}.metrics.txt
+    """
 }

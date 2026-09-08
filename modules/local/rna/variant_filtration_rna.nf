@@ -27,4 +27,9 @@ process VARIANT_FILTRATION_RNA {
         -filter "FS > 30.0 || QD < 2.0" \\
         --filter-name FSQD
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.filtered.vcf
+    """
 }

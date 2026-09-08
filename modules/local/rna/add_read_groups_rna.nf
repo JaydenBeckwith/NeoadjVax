@@ -28,4 +28,9 @@ process ADD_READ_GROUPS_RNA {
         CREATE_INDEX=true \\
         VALIDATION_STRINGENCY=SILENT
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.rg.bam
+    """
 }

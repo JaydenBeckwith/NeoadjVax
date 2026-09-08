@@ -21,4 +21,9 @@ process BWA_MEM_ALIGN {
     bwa mem -t ${task.cpus} ${fasta} ${r1} ${r2} \\
         | samtools sort -@ ${task.cpus} -o ${meta.id}.${sample_type}.sorted.bam -
     """
+
+    stub:
+    """
+    touch ${meta.id}.${sample_type}.sorted.bam
+    """
 }

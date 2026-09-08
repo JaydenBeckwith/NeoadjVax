@@ -32,6 +32,11 @@ process BASE_RECALIBRATOR {
         --known-sites ${mills} \\
         --known-sites ${dbsnp}
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.recal.data.csv
+    """
 }
 
 process APPLY_BQSR {
@@ -56,5 +61,10 @@ process APPLY_BQSR {
         -I ${bam} \\
         -O ${meta.id}_${meta.timepoint}.recal.bam \\
         --bqsr-recal-file ${recal_table}
+    """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.recal.bam
     """
 }

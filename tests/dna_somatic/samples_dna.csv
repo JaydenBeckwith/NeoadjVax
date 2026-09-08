@@ -1,0 +1,2 @@
+patient_id,tumor_r1,tumor_r2,normal_r1,normal_r2,tumor_bam,normal_bam,dna_vcf,hla_alleles
+P1,,,,,tests/dna_somatic/tumor.bam,tests/dna_somatic/normal.bam,,HLA-A*02:01|HLA-B*07:02

@@ -26,4 +26,9 @@ process BAM_TO_FASTQ {
         VALIDATION_STRINGENCY=SILENT
     rm -f namesorted.bam
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}_R1.fastq.gz ${meta.id}_${meta.timepoint}_R2.fastq.gz
+    """
 }

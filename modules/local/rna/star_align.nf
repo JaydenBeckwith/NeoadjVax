@@ -32,4 +32,9 @@ process STAR_ALIGN {
 
     samtools index ${meta.id}_${meta.timepoint}.Aligned.sortedByCoord.out.bam
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.Aligned.sortedByCoord.out.bam ${meta.id}_${meta.timepoint}.Log.final.out
+    """
 }

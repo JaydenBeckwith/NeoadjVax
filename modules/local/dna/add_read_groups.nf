@@ -26,4 +26,9 @@ process ADD_READ_GROUPS {
         RGSM=${sample_type} \\
         VALIDATION_STRINGENCY=LENIENT
     """
+
+    stub:
+    """
+    touch ${meta.id}.${sample_type}.rg.bam
+    """
 }

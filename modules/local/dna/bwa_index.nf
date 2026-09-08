@@ -24,4 +24,9 @@ process BWA_INDEX {
         bwa index ${fasta}
     fi
     """
+
+    stub:
+    """
+    touch ${fasta}.bwt ${fasta}.pac ${fasta}.ann ${fasta}.amb ${fasta}.sa
+    """
 }

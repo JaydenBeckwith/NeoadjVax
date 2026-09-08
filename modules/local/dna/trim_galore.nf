@@ -20,4 +20,9 @@ process TRIM_GALORE {
     """
     trim_galore --paired --cores ${task.cpus} -o . ${r1} ${r2}
     """
+
+    stub:
+    """
+    touch ${meta.id}.${sample_type}_val_1.fq.gz ${meta.id}.${sample_type}_val_2.fq.gz ${meta.id}.${sample_type}_trimming_report.txt
+    """
 }

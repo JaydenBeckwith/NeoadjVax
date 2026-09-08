@@ -18,4 +18,9 @@ process FASTQC {
     """
     fastqc -o . ${r1} ${r2}
     """
+
+    stub:
+    """
+    touch ${meta.id}.${sample_type}.${stage}_stub.html ${meta.id}.${sample_type}.${stage}_stub.zip
+    """
 }

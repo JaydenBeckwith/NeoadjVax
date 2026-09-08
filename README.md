@@ -12,7 +12,10 @@ peptide-context prediction; see [the splicing guide](docs/SPLICING.md). See
 launch this on Gadi: it's not a `qsub script.sh` like the original
 scripts; Nextflow submits every step as its own PBS job for you, but
 compute nodes having no external network means a one-time container
-pre-caching step is required first.
+pre-caching step is required first. See
+[`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) for where every external
+reference file (genome, known-sites VCFs, VEP cache, AGFusion database,
+and so on) comes from and which `--param` passes it in.
 
 [![NeoadjVax metromap: core, discovery and HLA-LOH workflows, with RNA input from any timepoint](assets/neoadjvax-pipeline-overview.svg)](assets/neoadjvax-pipeline-overview.svg)
 

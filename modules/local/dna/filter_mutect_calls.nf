@@ -22,4 +22,9 @@ process FILTER_MUTECT_CALLS {
         -V ${raw_vcf} \\
         -O ${meta.id}_filtered.vcf.gz
     """
+
+    stub:
+    """
+    touch ${meta.id}_filtered.vcf.gz
+    """
 }

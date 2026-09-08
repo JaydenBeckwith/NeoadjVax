@@ -21,4 +21,9 @@ process TABIX_INDEX {
         gatk IndexFeatureFile -I ${vcf}
     fi
     """
+
+    stub:
+    """
+    touch ${vcf}.tbi
+    """
 }

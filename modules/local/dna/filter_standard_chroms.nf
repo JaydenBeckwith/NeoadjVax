@@ -19,4 +19,9 @@ process FILTER_STANDARD_CHROMS {
     """
     filter_vcf_standard_chroms.py ${vcf} ${meta.id}_filtered_for_vep.vcf
     """
+
+    stub:
+    """
+    touch ${meta.id}_filtered_for_vep.vcf
+    """
 }

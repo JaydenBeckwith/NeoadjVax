@@ -20,4 +20,9 @@ process VARIANTS_TO_TABLE {
         -F CHROM -F POS -F TYPE -F REF -F ALT -F QUAL -F FILTER -GF AD \\
         -O ${meta.id}_${meta.timepoint}.filtered.tsv
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.filtered.tsv
+    """
 }

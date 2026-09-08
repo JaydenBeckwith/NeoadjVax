@@ -23,4 +23,9 @@ process SPLIT_NCIGAR_READS {
         -I ${bam} \\
         -O ${meta.id}_${meta.timepoint}.split.bam
     """
+
+    stub:
+    """
+    touch ${meta.id}_${meta.timepoint}.split.bam
+    """
 }
