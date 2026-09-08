@@ -72,13 +72,19 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: Install Nextflow
+        # Pinned: get.nextflow.io installs whatever is currently latest,
+        # and that mattered here (an older run against a newer Nextflow
+        # surfaced two real strict-syntax parse breaks in this repo's own
+        # .nf files, since fixed). Pinning keeps a future Nextflow release
+        # from silently breaking this workflow again the same way.
         run: |
+          export NXF_VER=26.04.6
           curl -s https://get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
           nextflow -version
       - name: Run smoke test
         run: |
-          nextflow -C "tests/${{ matrix.branch }}/smoke.config" \
+          nextflow -c "tests/${{ matrix.branch }}/smoke.config" \
                     run "tests/${{ matrix.branch }}/smoke.nf" -stub-run
 
   stub-run-splicing:
@@ -98,7 +104,13 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: Install Nextflow
+        # Pinned: get.nextflow.io installs whatever is currently latest,
+        # and that mattered here (an older run against a newer Nextflow
+        # surfaced two real strict-syntax parse breaks in this repo's own
+        # .nf files, since fixed). Pinning keeps a future Nextflow release
+        # from silently breaking this workflow again the same way.
         run: |
+          export NXF_VER=26.04.6
           curl -s https://get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
           nextflow -version

@@ -289,8 +289,12 @@ workflow {
 
         HLA_LOH(hla_loh_tumor_bam_ch, hla_loh_purity_ploidy_ch)
     }
-}
 
-workflow.onComplete {
-    log.info "NeoadjVax finished: status: ${workflow.success ? 'OK' : 'FAILED'}: results: ${params.outdir}"
+    // Strict syntax (Nextflow 25.10+) does not allow workflow.onComplete as
+    // a bare top-level statement after the entry workflow: it must be
+    // registered from inside a script declaration. See
+    // https://nextflow.io/docs/latest/strict-syntax.html.
+    workflow.onComplete = {
+        log.info "NeoadjVax finished: status: ${workflow.success ? 'OK' : 'FAILED'}: results: ${params.outdir}"
+    }
 }

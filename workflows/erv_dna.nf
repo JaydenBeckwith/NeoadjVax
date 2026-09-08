@@ -50,7 +50,7 @@ def validateErvDnaSamplesheet(path, boolean reuseDnaBams) {
     def ids = [] as Set
     def count = 0
     file(path, checkIfExists: true).splitCsv(header: true).each { row ->
-        count++
+        count = count + 1
         if (!(row.patient_id ==~ /[A-Za-z0-9][A-Za-z0-9_.-]*/)) {
             error "ERV_DNA: patient_id is required; use only letters, digits, underscore, hyphen and dot"
         }

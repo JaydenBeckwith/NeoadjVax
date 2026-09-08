@@ -198,7 +198,7 @@ across callers even though their native read-support columns differ.
 
 ~~~bash
 python3 -B -m unittest discover -s tests -v
-nextflow -C tests/fusion/smoke.config run tests/fusion/smoke.nf -stub-run
+nextflow -c tests/fusion/smoke.config run tests/fusion/smoke.nf -stub-run
 ~~~
 
 Run from the repository root. The smoke fixture uses one patient/timepoint

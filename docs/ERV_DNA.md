@@ -154,7 +154,7 @@ Tumour purity and copy number affect interpretation of the diploid genotype.
 
 ~~~bash
 python3 -B -m unittest discover -s tests -v
-nextflow -C tests/erv_dna/smoke.config run tests/erv_dna/smoke.nf -stub-run
+nextflow -c tests/erv_dna/smoke.config run tests/erv_dna/smoke.nf -stub-run
 ~~~
 
 Run from the repository root. The smoke fixture deliberately uses non-BAM

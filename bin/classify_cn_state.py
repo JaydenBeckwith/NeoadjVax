@@ -14,13 +14,6 @@ state, using Jayden's stated rule for the neoadjuvant LOH analysis
      samples" pattern already flagged as worth a second look, possibly
      whole-genome-doubling related)
 
-IMPORTANT: this script reconstructs the rule as YOU described it in an
-earlier conversation, not a copy of your actual classify_cn_state R
-function: the column names/expected input below are standard Sequenza
-`sequenza.results()` output (chromosome, start.pos, end.pos, CNt, A, B,
-...), but if your real script uses different column names, different
-segment merging, or additional filtering, replace this with your actual
-code rather than assuming this matches it exactly.
 
 Usage:
     classify_cn_state.py segments.txt -o classified_segments.tsv \\
@@ -48,7 +41,7 @@ def main():
     p.add_argument("segments_file", help="Sequenza *_segments.txt (tab-separated, with a header row)")
     p.add_argument("-o", "--out", required=True)
     p.add_argument("--biallelic-loss-out", default=None,
-                    help="separate file for CNt==0 segments (worth tracking for the WGD question raised on 3/98 samples), only written if non-empty")
+                    help="separate file for CNt==0 segments, only written if non-empty")
     p.add_argument("--cnt-col", default="CNt")
     p.add_argument("--b-col", default="B")
     args = p.parse_args()
