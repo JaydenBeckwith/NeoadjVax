@@ -1,2 +1,0 @@
-patient_id,timepoint,rna_bam,rna_fastq_r1,rna_fastq_r2,rna_vcf
-P1,PRE,tests/dna_somatic/rna.bam,,,

@@ -21,7 +21,7 @@ def fusionAlleles(value) {
 }
 
 def fusionPath(value, label, directory = false) {
-    if (!value || value.toString().contains("'") || value.toString() =~ /[\r\n]/) {
+    if (!value || value.toString().contains("'") || (value.toString() =~ /[\r\n]/)) {
         error "Fusion: provide a valid ${label} path (no apostrophes/newlines)"
     }
     def path = file(value)

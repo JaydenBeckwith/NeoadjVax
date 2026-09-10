@@ -4,10 +4,10 @@
 // kept exactly as specified in the original script.
 
 process VEP_ANNOTATE {
-    tag "${meta.id}"
+    tag "${meta.id}:${meta.timepoint}"
     label 'process_medium'
     container params.containers.vep
-    publishDir "${params.outdir}/${meta.id}/dna_variants", mode: 'copy'
+    publishDir "${params.outdir}/${meta.id}/dna_variants/${meta.timepoint}", mode: 'copy'
 
     input:
     tuple val(meta), path(vcf)
@@ -16,12 +16,12 @@ process VEP_ANNOTATE {
     path vep_plugins
 
     output:
-    tuple val(meta), path("${meta.id}.annotated.vcf.gz"), emit: vcf
+    tuple val(meta), path("${meta.id}_${meta.timepoint}.annotated.vcf.gz"), emit: vcf
 
     script:
     """
     vep -i ${vcf} \\
-        -o ${meta.id}.annotated.vcf.gz \\
+        -o ${meta.id}_${meta.timepoint}.annotated.vcf.gz \\
         --format vcf --vcf --verbose --assembly GRCh38 \\
         --symbol --canonical --distance 5 \\
         --plugin Wildtype,${fasta} \\
@@ -39,6 +39,6 @@ process VEP_ANNOTATE {
 
     stub:
     """
-    touch ${meta.id}.annotated.vcf.gz
+    touch ${meta.id}_${meta.timepoint}.annotated.vcf.gz
     """
 }

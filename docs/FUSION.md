@@ -18,9 +18,8 @@ branch reads: `starfusion_tsv` and `arriba_tsv`. Set one of these to a
 caller's own native output TSV to bypass that caller's STAR pass and calling
 step entirely for that patient/timepoint: any caller left without a TSV
 still runs its own dedicated STAR alignment and calling from `rna_bam` or
-`rna_fastq_r1`/`rna_fastq_r2` on that row. `rna_vcf`-only rows contribute
-nothing to this branch: there is no variant file a fusion caller can start
-from, so they participate only in `PVACSEQ_CORE`.
+`rna_fastq_r1`/`rna_fastq_r2` on that row. `rna_vcf`-only rows without the requested caller TSVs fail fusion validation:
+there is no variant file a fusion caller can start from.
 
 ~~~csv
 patient_id,timepoint,rna_bam,rna_fastq_r1,rna_fastq_r2,rna_vcf,hla_alleles,starfusion_tsv,arriba_tsv
@@ -179,7 +178,8 @@ Each `results/PATIENT/fusion/TIMEPOINT/CALLER/` directory contains:
 
 An empty AGFusion annotation (no fusions passed the read-support/FFPM
 filters) is a valid negative result, not a failure: `bin/fusion_tools.py`
-writes `annotation_qc.json` with `status: no_fusions` and does not invoke
+writes `annotation_qc.json` with `status: no_fusions` (header-only input) or
+`no_fusions_after_filter` (all input calls excluded), and does not invoke
 pVACfuse for that patient/timepoint/caller, rather than launching pVACfuse
 against nothing. The reverse (a non-empty AGFusion result reporting zero
 Predictable fusion protein records) is written to `run_status.json` as
@@ -190,9 +190,11 @@ treated as a failure, not a successful negative result: see
 
 Filter thresholds (`--fusion_min_read_support`, default 5;
 `--fusion_min_ffpm`, default 0.1, STAR-Fusion only, since Arriba reports no
-FFPM) are applied identically to both callers' inputs before annotation, not
-inside AGFusion or pVACfuse themselves, so the same evidence bar applies
-across callers even though their native read-support columns differ.
+FFPM) are applied before annotation and recorded per row in `input_audit.tsv`.
+STAR-Fusion's filtered TSV also supplies pVACfuse with read support and FFPM.
+For Arriba-derived AGFusion inputs, pVACfuse reports both fields as NA:
+read support was checked upstream, but expression was unavailable and is
+not invented. Do not treat NA expression as evidence that a threshold passed.
 
 ## Verification
 
@@ -223,3 +225,9 @@ sample through the branch end to end.
 - [GENCODE release history](https://www.gencodegenes.org/human/releases.html)
 - [Arriba (suhrig/arriba)](https://github.com/suhrig/arriba)
 - [STAR-Fusion (STAR-Fusion/STAR-Fusion)](https://github.com/STAR-Fusion/STAR-Fusion)
+
+The PyEnsembl cache is copied into each annotation task because lazy indexes
+can be written during annotation. Budget scratch storage for these copies;
+shared reference caches are not modified by concurrent tasks. Fusion tool
+versions are pinned, but a Linux/reference-matched biological pilot remains
+necessary; unit and stub tests do not validate neoantigen accuracy.

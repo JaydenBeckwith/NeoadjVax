@@ -46,7 +46,8 @@ workflow PVACSEQ_CORE {
     dna_keyed = dna_filtered_vcf_ch.map { meta, vcf -> tuple(meta.id, vcf) }
     rna_keyed = rna_filtered_vcf_ch.map { meta, vcf -> tuple(meta.id, meta, vcf) }
 
-    matched_ch = rna_keyed.join(dna_keyed)
+    // Reuse one DNA call set for every longitudinal RNA sample.
+    matched_ch = rna_keyed.combine(dna_keyed, by: 0)
         .map { patient_id, rna_meta, rna_vcf, dna_vcf -> tuple(rna_meta, dna_vcf, rna_vcf) }
 
     RNA_SUPPORT_FILTER(matched_ch)

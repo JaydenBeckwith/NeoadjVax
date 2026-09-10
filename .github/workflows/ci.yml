@@ -1,16 +1,5 @@
-# CI for structure and style, not biology: no real reference data,
-# containers or Gadi access exist here. The stub-run job is the one that
-# actually exercises Nextflow itself (with docker/singularity disabled and
-# every process's placeholder `stub:` block), which neither the cloud
-# sandbox nor this repo's own dev machine could do when this workflow was
-# written (both lack the network access to install Nextflow); GitHub's
-# runners have no such restriction, so this is the first place these
-# branches get a real Nextflow run rather than a hand-rolled static check.
-#
-# The erv_dna/fusion/splicing stub-run jobs that used to live here were
-# removed: the "somatic_neoantigen" pipeline (DNA + RNA variant calling +
-# pVACseq core) below is the most mature, most original-script-ported part
-# of NeoadjVax, so it's the one kept running in CI for now.
+# Synthetic BAMs are real/validated; analysis tools are stubbed intentionally.
+# This checks main.nf wiring and all patient/timepoint outputs, not accuracy.
 name: CI
 
 on:
@@ -18,57 +7,78 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  python-tests:
-    name: Python unit tests
-    runs-on: ubuntu-latest
+  checks:
+    name: Unit tests and Nextflow structure
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - run: python3 -m unittest discover -s tests -v
+          python-version: '3.11'
+      - name: Python regression tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Check Nextflow structure
+        run: python bin/check_nf_structure.py .
 
-  nf-structure:
-    name: .nf structural check
-    runs-on: ubuntu-latest
+  somatic-wiring:
+    name: Somatic pipeline — synthetic BAM wiring test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      NXF_VER: '26.04.6'
+      NXF_ANSI_LOG: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - run: python3 bin/check_nf_structure.py .
-
-
-  stub-run-dna-somatic:
-    # Runs main.nf itself (not a standalone smoke.nf) with --pipelines
-    # somatic_neoantigen: DNA_VARIANT_CALLING + RNA_VARIANT_CALLING +
-    # PVACSEQ_CORE together, the same way a real invocation would. See
-    # tests/dna_somatic/smoke.config for why P1's inputs are shaped the
-    # way they are (already-aligned BAMs, rna_skip_realignment, a manual
-    # hla_alleles override) and assets/samplesheet_schema.md for the
-    # samplesheet formats.
-    name: nextflow -stub-run (dna_somatic)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+          python-version: '3.11'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
-      - name: Install Nextflow
-        # Pinned: get.nextflow.io installs whatever is currently latest,
-        # and that mattered here (an older run against a newer Nextflow
-        # surfaced two real strict-syntax parse breaks in this repo's own
-        # .nf files, since fixed). Pinning keeps a future Nextflow release
-        # from silently breaking this workflow again the same way.
+          java-version: '21'
+      - name: Install samtools
         run: |
-          export NXF_VER=26.04.6
-          curl -s https://get.nextflow.io | bash
-          sudo mv nextflow /usr/local/bin/
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends samtools
+          samtools --version
+      - name: Install pinned Nextflow
+        run: |
+          curl --fail --silent --show-error --location https://get.nextflow.io -o nextflow
+          sudo install -m 755 nextflow /usr/local/bin/nextflow
           nextflow -version
-      - name: Run smoke test
+      - name: Generate and validate synthetic DNA/RNA BAMs
+        run: python tests/dna_somatic/make_fixture.py --outdir tests/dna_somatic/generated
+      - name: Run the real entry workflow with stubbed analysis tools
         run: |
-          nextflow -c tests/dna_somatic/smoke.config run main.nf -stub-run
+          nextflow -c tests/dna_somatic/smoke.config run main.nf \
+            --pipelines somatic_neoantigen -stub-run \
+            -work-dir test-work/dna_somatic
+      - name: Assert every patient and RNA timepoint reaches pVACseq
+        run: |
+          python tests/dna_somatic/check_results.py \
+            --manifest tests/dna_somatic/generated/manifest.json \
+            --trace test-results/dna_somatic/trace.tsv \
+            --outdir test-results/dna_somatic
+      - name: Upload fixture, results and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: somatic-wiring-diagnostics
+          include-hidden-files: true
+          retention-days: 7
+          path: |
+            .nextflow.log*
+            tests/dna_somatic/generated/
+            test-results/dna_somatic/
+            test-work/dna_somatic/**/.command.*

@@ -5,6 +5,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
     && rm -rf /var/lib/apt/lists/*
 RUN python -m pip install --no-cache-dir \
     numpy==1.26.4 pandas==2.2.3 matplotlib==3.9.4 biopython==1.85 \
-    pyensembl==2.3.13 mysql-connector-python==9.2.0 agfusion==1.5.0
+    pyensembl==2.3.13 gtfparse==2.5.0 mysql-connector-python==9.2.0 agfusion==1.5.0
 ENV MPLBACKEND=Agg
 RUN agfusion --version && pyensembl --help

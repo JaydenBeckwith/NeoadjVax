@@ -18,7 +18,7 @@ process PVACFUSE_RUN {
     def model_opt = models ? "--models '${models}'" : ''
     def iedb_opt = iedb ? "--iedb '${iedb}'" : ''
     """
-    python ${projectDir}/bin/fusion_tools.py predict \\
+    python '${projectDir}/bin/fusion_tools.py' predict \\
         --input '${agfusion_dir}' --sample '${meta.id}_${meta.timepoint}_${caller}' \\
         --caller '${caller}' --alleles '${hla_alleles}' \\
         --algorithms '${params.pvacfuse_algorithms}' --threads ${task.cpus} \\

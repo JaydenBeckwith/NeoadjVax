@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validated AGFusion -> pVACfuse hand-off. No network downloads or shell evaluation."""
 import argparse
+from contextlib import closing
 import csv
 import json
 import math
@@ -114,7 +115,7 @@ def check_database(database):
     if not match:
         raise ValueError("Keep the AGFusion database name agfusion.homo_sapiens.<release>.db")
     release = int(match[1])
-    with sqlite3.connect(Path(database).resolve().as_uri() + "?mode=ro", uri=True) as connection:
+    with closing(sqlite3.connect(Path(database).resolve().as_uri() + "?mode=ro", uri=True)) as connection:
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     required = {f"homo_sapiens_{release}", f"homo_sapiens_{release}_transcript"}
     if not required.issubset(tables):

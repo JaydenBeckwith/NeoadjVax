@@ -43,9 +43,11 @@ workflow RNA_VARIANT_CALLING {
     // --rna_skip_realignment leaves nothing that needs it: harmless.
     STAR_INDEX(fasta, gtf)
 
-    TABIX_MILLS(Channel.fromPath(params.known_mills))
-    TABIX_1000G(Channel.fromPath(params.known_1000g))
-    TABIX_DBSNP(Channel.fromPath(params.known_dbsnp))
+    // Shared references are reusable values, not single-use queue items.
+    // Otherwise BQSR/calling stops after the first RNA sample.
+    TABIX_MILLS(Channel.fromPath(params.known_mills).first())
+    TABIX_1000G(Channel.fromPath(params.known_1000g).first())
+    TABIX_DBSNP(Channel.fromPath(params.known_dbsnp).first())
 
     // patient-timepoints that already have a called+filtered RNA VCF skip
     // alignment AND calling entirely

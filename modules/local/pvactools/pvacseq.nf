@@ -5,10 +5,10 @@
 // producing a VEP-style annotated VCF rather than needing pVACfuse.
 
 process PVACSEQ_RUN {
-    tag "${meta.id}"
+    tag "${meta.id}:${meta.timepoint}"
     label 'process_medium'
     container params.containers.pvactools
-    publishDir "${params.outdir}/${meta.id}/pvacseq", mode: 'copy'
+    publishDir "${params.outdir}/${meta.id}/pvacseq/${meta.timepoint}", mode: 'copy'
 
     input:
     tuple val(meta), path(annotated_vcf), val(hla_alleles)

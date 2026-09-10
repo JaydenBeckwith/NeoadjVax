@@ -89,7 +89,7 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <text x="560" y="805" class="label" text-anchor="middle">Arriba</text>
 <circle cx="920" cy="715" r="11" class="station"/>
 <text x="920" y="654" class="label" text-anchor="middle">AGFusion</text>
-<text x="920" y="682" class="note" text-anchor="middle">Transcript / CDS / protein annotation</text>
+<text x="920" y="682" class="note" text-anchor="middle">Junction-marked proteins</text>
 <circle cx="1220" cy="715" r="11" class="station"/>
 <text x="1220" y="654" class="label" text-anchor="middle">pVACfuse</text>
 <text x="1220" y="682" class="note" text-anchor="middle">MHC binding prediction</text>

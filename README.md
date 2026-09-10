@@ -114,7 +114,7 @@ per-caller subdirectories, rather than merged into one consensus call set.
 The samplesheet's `rna_bam`/`rna_fastq_r1`+`rna_fastq_r2` columns, or a
 caller's own precomputed `starfusion_tsv`/`arriba_tsv`, both work as input.
 AGFusion annotation and pVACfuse binding prediction downstream of either
-caller are real end-to-end, not stubs: see [the fusion guide](docs/FUSION.md)
+caller are implemented; a reference-matched pilot is still required. See [the fusion guide](docs/FUSION.md)
 for exact CLI usage, the AGFusion database-release caveat (GENCODE v46 needs
 a built, not downloaded, database), the now-mandatory Arriba blacklist, and
 HLA-sourcing options.
@@ -155,3 +155,16 @@ actual read length. See [DNA ERV setup and run instructions](docs/ERV_DNA.md)
 for the container recipe, examples, checks and interpretation limits.
 For DNA and RNA analysis together, select `--pipelines erv_dna,erv`
 and `--erv_generate_peptides false`.
+
+## CI smoke test
+
+[CI](.github/workflows/ci.yml) generates eight valid synthetic DNA/RNA BAMs
+for two patients and four RNA timepoints, then runs the real `main.nf`
+entry workflow with `--pipelines somatic_neoantigen -stub-run`. Analysis
+tools are deliberately stubbed: this tests wiring, not biological accuracy.
+Assertions check task counts and every timepoint's output; logs and fixtures
+are uploaded on failure. See [local run instructions](tests/dna_somatic/README.md).
+
+Core VEP and pVACseq outputs are now separated by RNA timepoint under
+`<patient>/dna_variants/<timepoint>/` and `<patient>/pvacseq/<timepoint>/`,
+preventing longitudinal outputs from overwriting one another.

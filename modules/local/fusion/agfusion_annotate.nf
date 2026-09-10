@@ -20,7 +20,7 @@ process AGFUSION_ANNOTATE {
     script:
     def noncanonical = params.agfusion_noncanonical ? '--noncanonical' : ''
     """
-    python ${projectDir}/bin/fusion_tools.py annotate \\
+    python '${projectDir}/bin/fusion_tools.py' annotate \\
         --input '${fusion_file}' --caller '${caller}' \\
         --database '${database}' --cache '${cache}' \\
         --min-reads ${params.fusion_min_read_support} --min-ffpm ${params.fusion_min_ffpm} \\

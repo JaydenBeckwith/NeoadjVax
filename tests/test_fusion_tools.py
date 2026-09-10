@@ -1,4 +1,5 @@
 import argparse
+from contextlib import closing
 import csv
 import importlib.util
 import json
@@ -37,9 +38,10 @@ class FusionTools(unittest.TestCase):
 
     def database(self, release=111):
         path = self.root / f"agfusion.homo_sapiens.{release}.db"
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db:
             db.execute(f"CREATE TABLE homo_sapiens_{release} (stable_id TEXT)")
             db.execute(f"CREATE TABLE homo_sapiens_{release}_transcript (transcript_stable_id TEXT)")
+            db.commit()
         return path
 
     def annotate_args(self, rows):
