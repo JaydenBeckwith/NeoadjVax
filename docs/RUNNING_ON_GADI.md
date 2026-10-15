@@ -54,21 +54,58 @@ step as its own job. Log out any time; the driver job keeps running and
 keeps submitting/monitoring steps until the pipeline finishes or the
 walltime runs out.
 
-**Option B: a login-node `screen`/`tmux` session**, if you'd rather watch
-it live or iterate quickly without waiting in the job queue for the driver
-itself:
+**Option B: a tmux session**, if you'd rather watch it live or iterate
+quickly without waiting in the queue for the driver itself.
+`bin/run_somatic_gadi.sh` runs a preflight check, then starts the driver
+in a detached tmux session. The preflight checks the Nextflow version,
+the samplesheets, the VEP cache and plugins, the reference files and the
+cached containers.
+
+Run it inside an NCI **persistent session**, not on a plain login node:
+NCI kills long-running processes on the login nodes, and persistent
+sessions exist for exactly this kind of workflow-manager process. Check
+the current syntax with `persistent-sessions --help`.
 
 ```bash
-screen -S neoadjvax
-module load nextflow singularity
-nextflow run main.nf -profile gadi \
-    --dna_samplesheet dna_samples.csv \
-    --rna_samplesheet rna_samples.csv \
-    --vep_cache /path/to/vep_cache \
-    --vep_plugins /path/to/vep_plugins \
-    --outdir results/
-# Ctrl+A, D to detach: log back in and `screen -r neoadjvax` to reattach
+# from a Gadi login node
+persistent-sessions start -p jo11 neoadjvax
+ssh neoadjvax.${USER}.jo11.ps.gadi.nci.org.au
+
+cd /scratch/jo11/$USER/NeoadjVax          # wherever the repo is cloned
+cp assets/params_somatic_gadi.example.yaml /scratch/jo11/$USER/somatic.yaml
+# edit somatic.yaml: samplesheets, outdir, vep_cache, vep_plugins
+
+bash bin/run_somatic_gadi.sh --check /scratch/jo11/$USER/somatic.yaml   # preflight only
+bash bin/run_somatic_gadi.sh /scratch/jo11/$USER/somatic.yaml           # launch in tmux
+
+tmux attach -t neoadjvax_somatic          # Ctrl+B then D to detach
 ```
+
+The tmux session keeps going after you log out. Its output is also teed
+to `logs/somatic_<timestamp>.log`. Rerunning the script after a failure
+resumes from the last completed step: it always passes `-resume` with the
+same work directory (`/scratch/jo11/$USER/neoadjvax_work`).
+
+The same params file works for Option A:
+`qsub -v PARAMS_FILE=/scratch/jo11/$USER/somatic.yaml bin/submit_nextflow_gadi.pbs`.
+
+### Mutational track checklist
+
+`--pipelines somatic_neoantigen` covers DNA calling, RNA calling and
+pVACseq. Before its first real run:
+
+1. `bash bin/prefetch_containers.sh somatic` on a login node. This pulls
+   only BWA, Trim Galore, FastQC, VEP 111, pVACtools 7.1.3 and xHLA.
+2. Use a VEP cache that matches the container: `homo_sapiens/111_GRCh38`.
+   The plugin directory needs pVACtools' `Wildtype.pm` and
+   `Frameshift.pm`.
+3. Use Nextflow ≥ 24.04. `conf/gadi.config` uses `resourceLimits`, which
+   caps retried steps to one normal-queue node (48 cpus, 190 GB, 48 h)
+   instead of letting qsub reject them.
+4. pVACseq reads the tumour and normal VCF columns `tumor` and `normal`.
+   These come from Mutect2's read-group sample names. If you supply your
+   own `dna_vcf`, set `pvacseq_tumor_sample_name` and
+   `pvacseq_normal_sample_name` to match it.
 
 Either way, the actual variant calling / alignment / pVACseq work always
 runs as real PBS jobs on compute nodes, submitted automatically: these

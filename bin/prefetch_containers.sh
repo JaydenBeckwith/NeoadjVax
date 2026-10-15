@@ -41,7 +41,6 @@ declare -A IMAGES=(
     ["https://depot.galaxyproject.org/singularity/trim-galore:0.6.10--hdfd78af_0"]="depot.galaxyproject.org-singularity-trim-galore-0.6.10--hdfd78af_0.img"
     ["https://depot.galaxyproject.org/singularity/fastqc:0.12.1--hdfd78af_0"]="depot.galaxyproject.org-singularity-fastqc-0.12.1--hdfd78af_0.img"
     ["https://depot.galaxyproject.org/singularity/ensembl-vep:111.0--pl5321h2a3209d_0"]="depot.galaxyproject.org-singularity-ensembl-vep-111.0--pl5321h2a3209d_0.img"
-    ["docker://griffithlab/pvactools:latest"]="griffithlab-pvactools-latest.img"
     ["docker://griffithlab/pvactools:7.1.3"]="griffithlab-pvactools-7.1.3.img"
     ["https://depot.galaxyproject.org/singularity/star-fusion:1.13.0--hdfd78af_2"]="depot.galaxyproject.org-singularity-star-fusion-1.13.0--hdfd78af_2.img"
     ["https://depot.galaxyproject.org/singularity/arriba:2.5.1--h87b9561_0"]="depot.galaxyproject.org-singularity-arriba-2.5.1--h87b9561_0.img"
@@ -51,6 +50,18 @@ declare -A IMAGES=(
     ["https://depot.galaxyproject.org/singularity/telescope:1.0.3--py38h8e05983_5"]="depot.galaxyproject.org-singularity-telescope-1.0.3--py38h8e05983_5.img"
     ["docker://humanlongevity/hla:0.0.0"]="humanlongevity-hla-0.0.0.img"
 )
+
+# `bash bin/prefetch_containers.sh somatic` pulls only what
+# --pipelines somatic_neoantigen needs (star/picard/gatk/samtools are
+# already local .sif files on /scratch/jo11).
+if [ "${1:-all}" = "somatic" ]; then
+    for uri in "${!IMAGES[@]}"; do
+        case "$uri" in
+            *bwa:*|*trim-galore:*|*fastqc:*|*ensembl-vep:*|*pvactools:*|*humanlongevity/hla:*) ;;
+            *) unset "IMAGES[$uri]" ;;
+        esac
+    done
+fi
 
 for uri in "${!IMAGES[@]}"; do
     fname="${IMAGES[$uri]}"

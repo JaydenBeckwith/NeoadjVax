@@ -1,0 +1,27 @@
+# Mutational (somatic DNA + RNA -> pVACseq) track on Gadi.
+# Copy somewhere outside the repo, fill in the paths, then pass it with
+# `bin/run_somatic_gadi.sh <this file>` or `-params-file <this file>`.
+# Anything not set here keeps its nextflow.config default.
+
+pipelines: somatic_neoantigen
+
+dna_samplesheet: /scratch/jo11/CHANGE_ME/dna_samples.csv
+rna_samplesheet: /scratch/jo11/CHANGE_ME/rna_samples.csv
+outdir: /scratch/jo11/CHANGE_ME/neoadjvax_results
+
+# Required: VEP cache must match the VEP 111 container (homo_sapiens/111_GRCh38),
+# and the plugin dir must hold pVACtools' Wildtype.pm and Frameshift.pm.
+vep_cache: /g/data/jo11/CHANGE_ME/vep_cache
+vep_plugins: /g/data/jo11/CHANGE_ME/vep_plugins
+
+# Reference defaults already point at /scratch/jo11 (see nextflow.config);
+# uncomment to override.
+# genome_fasta: /scratch/jo11/GRCh38.fa/GRCh38.primary_assembly.genome.fa
+# gtf: /scratch/jo11/GRCh38.fa/gencode.v46.chr_patch_hapl_scaff.annotation.gtf
+# star_index_dir: /scratch/jo11/STAR_index_GRCh38_gencode46
+
+# Set true only if RNA BAMs already match this pipeline's STAR settings.
+rna_skip_realignment: false
+
+pvacseq_algorithms: MHCflurry
+min_rna_alt_reads: 1

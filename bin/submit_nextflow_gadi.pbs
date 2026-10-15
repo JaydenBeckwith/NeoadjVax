@@ -13,8 +13,9 @@
 # every container must already be cached or the run will fail on the
 # first process that needs one.
 #
-# Usage: qsub bin/submit_nextflow_gadi.pbs
-# (edit the nextflow run command below with your actual samplesheets/paths first)
+# Usage: qsub -v PARAMS_FILE=/path/to/params.yaml bin/submit_nextflow_gadi.pbs
+# (start from assets/params_somatic_gadi.example.yaml; check it first with
+#  bash bin/run_somatic_gadi.sh --check /path/to/params.yaml)
 
 #PBS -N neoadjvax_driver
 #PBS -P jo11
@@ -34,11 +35,14 @@ module load singularity
 
 mkdir -p pbs_logs
 
+: "${PARAMS_FILE:?pass the params file: qsub -v PARAMS_FILE=/path/to/params.yaml ...}"
+export NXF_OPTS="-Xms500m -Xmx3g"
+export NXF_ANSI_LOG=false
+# Modules are not strict-syntax (v2) clean yet; Nextflow >= 25.10 defaults to v2.
+export NXF_SYNTAX_PARSER=v1
+
 nextflow run main.nf \
     -profile gadi \
-    --dna_samplesheet dna_samples.csv \
-    --rna_samplesheet rna_samples.csv \
-    --vep_cache /path/to/vep_cache \
-    --vep_plugins /path/to/vep_plugins \
-    --outdir results/ \
+    -params-file "${PARAMS_FILE}" \
+    -work-dir "/scratch/jo11/${USER}/neoadjvax_work" \
     -resume

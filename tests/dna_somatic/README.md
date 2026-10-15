@@ -12,6 +12,7 @@ On Linux, with Python 3, samtools, Java 21 and Nextflow 26.04.6:
 
 ```bash
 python tests/dna_somatic/make_fixture.py --outdir tests/dna_somatic/generated
+export NXF_SYNTAX_PARSER=v1   # modules are not strict-syntax clean yet
 nextflow -c tests/dna_somatic/smoke.config run main.nf \
   --pipelines somatic_neoantigen -stub-run -work-dir test-work/dna_somatic
 python tests/dna_somatic/check_results.py \

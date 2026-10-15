@@ -13,47 +13,47 @@ def validateSplicingSamplesheets(dnaPath, rnaPath, reuseDna, opts) {
         file(value, checkIfExists: true)
     }
     dnaRows.each { row ->
-        if (!safeId(row.patient_id)) error "Splicing DNA rows need a safe patient_id (letters, digits, _, ., -)"
+        if (!safeId.call(row.patient_id)) error "Splicing DNA rows need a safe patient_id (letters, digits, _, ., -)"
         if (!ids.add(row.patient_id)) error "Splicing DNA: duplicate patient_id ${row.patient_id}"
         if (!row.spliceai_vcf && !row.dna_vcf && !reuseDna) {
             error "Splicing DNA ${row.patient_id}: supply dna_vcf/spliceai_vcf or also select dna_variant_calling"
         }
-        if (row.spliceai_vcf) checkFile(row.spliceai_vcf)
-        else if (row.dna_vcf) checkFile(row.dna_vcf)
+        if (row.spliceai_vcf) checkFile.call(row.spliceai_vcf)
+        else if (row.dna_vcf) checkFile.call(row.dna_vcf)
     }
     rnaRows.each { row ->
-        if (!safeId(row.patient_id) || !safeId(row.timepoint)) error "Splicing RNA rows need safe patient_id and timepoint labels"
+        if (!safeId.call(row.patient_id) || !safeId.call(row.timepoint)) error "Splicing RNA rows need safe patient_id and timepoint labels"
         if (!ids.contains(row.patient_id)) error "Splicing RNA patient ${row.patient_id} has no matching DNA row"
         if (!rnaKeys.add([row.patient_id, row.timepoint])) error "Duplicate splicing RNA patient/timepoint: ${row.patient_id}/${row.timepoint}"
         if (row.leafcutter_counts) {
-            checkFile(row.leafcutter_counts)
+            checkFile.call(row.leafcutter_counts)
             if (row.leafcutter_sample && !(row.leafcutter_sample ==~ /[A-Za-z0-9][A-Za-z0-9_.-]*/)) error "leafcutter_sample must be an exact, safe counts-header sample name"
         } else if (row.rna_bam) {
-            checkFile(row.rna_bam)
+            checkFile.call(row.rna_bam)
             if (!((row.rna_strand ?: opts.splicing_rna_strand) in ['XS', 'RF', 'FR'])) {
                 error "Splicing RNA BAM ${row.patient_id}/${row.timepoint}: set rna_strand or --splicing_rna_strand to XS, RF, or FR"
             }
         } else if (row.rna_fastq_r1 && row.rna_fastq_r2) {
-            checkFile(row.rna_fastq_r1)
-            checkFile(row.rna_fastq_r2)
+            checkFile.call(row.rna_fastq_r1)
+            checkFile.call(row.rna_fastq_r2)
             if (row.rna_fastq_r1.endsWith('.gz') != row.rna_fastq_r2.endsWith('.gz')) error "RNA FASTQ pair must use the same compression"
         } else {
             error "Splicing RNA ${row.patient_id}/${row.timepoint}: needs leafcutter_counts, an unsplit RNA BAM, or paired FASTQs; RNA VCF alone is not junction evidence"
         }
     }
     if (opts.spliceai_annotated_vcf_dir) error "Replace --spliceai_annotated_vcf_dir with explicit per-patient spliceai_vcf paths in the DNA sheet"
-    checkFile(opts.genome_fasta)
-    checkFile(opts.gtf)
-    if (opts.splicing_normal_junctions) checkFile(opts.splicing_normal_junctions)
+    checkFile.call(opts.genome_fasta)
+    checkFile.call(opts.gtf)
+    if (opts.splicing_normal_junctions) checkFile.call(opts.splicing_normal_junctions)
     else if (!opts.splicing_allow_missing_normal) error "Supply --splicing_normal_junctions (GTEx/normal junc_id TSV), or explicitly enable --splicing_allow_missing_normal for exploratory output"
     def needsAnnotation = dnaRows.any { !it.spliceai_vcf }
     def needsLeafcutter = rnaRows.any { !it.leafcutter_counts }
     if ((needsAnnotation || needsLeafcutter) && !opts.splicing_tools_container) error "Set --splicing_tools_container; build recipe: containers/splicing-tools/Dockerfile"
     if (needsAnnotation) {
         if (!opts.spliceai_annotation) error "DNA SpliceAI annotation requires --spliceai_annotation grch37/grch38 or a matching custom annotation file"
-        if (!(opts.spliceai_annotation in ['grch37', 'grch38'])) checkFile(opts.spliceai_annotation)
+        if (!(opts.spliceai_annotation in ['grch37', 'grch38'])) checkFile.call(opts.spliceai_annotation)
     }
-    if (rnaRows.any { !it.leafcutter_counts && !it.rna_bam } && opts.star_index_dir) checkFile(opts.star_index_dir)
+    if (rnaRows.any { !it.leafcutter_counts && !it.rna_bam } && opts.star_index_dir) checkFile.call(opts.star_index_dir)
     if (!(opts.spliceai_min_delta_score instanceof Number) || opts.spliceai_min_delta_score < 0 || opts.spliceai_min_delta_score > 1) error "spliceai_min_delta_score must be in [0,1]"
     if (!(opts.spliceai_distance instanceof Number) || opts.spliceai_distance < 1 || opts.spliceai_distance > 4999 || opts.spliceai_distance != opts.spliceai_distance.intValue()) error "spliceai_distance must be an integer in [1,4999]"
     ['splicing_min_rna_reads', 'splicing_peptide_flank', 'splicing_min_peptide_length', 'leafcutter_min_reads', 'splicing_star_overhang'].each { key ->

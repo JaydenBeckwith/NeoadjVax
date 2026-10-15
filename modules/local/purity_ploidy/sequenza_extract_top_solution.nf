@@ -24,7 +24,7 @@ process SEQUENZA_EXTRACT_TOP_SOLUTION {
     tuple val(meta), val(sex), path(raw_results)
 
     output:
-    tuple val(meta), env(PURITY), env(PLOIDY), emit: purity_ploidy
+    tuple val(meta), env('PURITY'), env('PLOIDY'), emit: purity_ploidy
     path "${meta.id}_top_solution.tsv", emit: report
 
     script:

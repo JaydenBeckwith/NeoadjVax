@@ -72,7 +72,7 @@ def applyPipelineSelection(String pipelinesParam) {
     def flagsToEnable = [] as Set
     def unknown = []
     requested.each { name ->
-        def key = normalize(name)
+        def key = normalize.call(name)
         if (registry.containsKey(key)) {
             flagsToEnable.addAll(registry[key])
         } else {

@@ -1,0 +1,13 @@
+# Nextflow run state and outputs
+.nextflow/
+.nextflow.log*
+work/
+results/
+logs/
+pbs_logs/
+test-work/
+test-results/
+
+# Python bytecode
+__pycache__/
+*.pyc

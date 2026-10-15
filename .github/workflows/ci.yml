@@ -38,6 +38,9 @@ jobs:
     env:
       NXF_VER: '26.04.6'
       NXF_ANSI_LOG: 'false'
+      # Nextflow >= 25.10 defaults to the strict v2 parser, which these modules
+      # don't pass yet (e.g. publishDir referencing meta); keep v1 until migrated.
+      NXF_SYNTAX_PARSER: 'v1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

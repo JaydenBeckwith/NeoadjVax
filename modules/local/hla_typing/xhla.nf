@@ -47,7 +47,7 @@ process HLA_TYPING_XHLA {
     tuple val(meta), path(normal_bam), path(normal_bai)
 
     output:
-    tuple val(meta), env(HLA_ALLELES), emit: hla_alleles
+    tuple val(meta), env('HLA_ALLELES'), emit: hla_alleles
     path "xhla_out/report-${meta.id}-hla.json", emit: report
     path "excluded_dq_dp_beta_only.txt", emit: excluded_alleles, optional: true
 
