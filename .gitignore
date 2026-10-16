@@ -11,3 +11,6 @@ test-results/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Real-cohort samplesheets (patient identifiers): keep out of git
+samplesheets/
