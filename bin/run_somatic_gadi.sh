@@ -61,12 +61,27 @@ fi
 
 # --- params file ---------------------------------------------------------
 [ -f "$PARAMS_FILE" ] || { echo "[FAIL] params file not found: $PARAMS_FILE"; exit 1; }
-param() { grep -E "^\s*$1\s*:" "$PARAMS_FILE" | head -1 | sed -E "s/^\s*$1\s*:\s*//; s/\s+#.*$//; s/^['\"]//; s/['\"]$//"; }
+# `|| true`: a key absent from the file must give "", not trip set -e/pipefail
+param() { { grep -E "^\s*$1\s*:" "$PARAMS_FILE" || true; } | head -1 | sed -E "s/^\s*$1\s*:\s*//; s/\s+#.*$//; s/^['\"]//; s/['\"]$//"; }
 
 grep -q "CHANGE_ME" "$PARAMS_FILE" && err "params file still contains CHANGE_ME placeholders"
 for key in dna_samplesheet rna_samplesheet; do
     val="$(param "$key")"
     if [ -z "$val" ]; then err "$key not set"; elif [ -f "$val" ]; then ok "$key: $val"; else err "$key missing: $val"; fi
+done
+for key in dna_samplesheet rna_samplesheet; do
+    sheet="$(param "$key")"
+    [ -f "$sheet" ] || continue
+    n=0
+    # every absolute path in the sheet (BAM/FASTQ/VCF) must exist
+    for f in $(tail -n +2 "$sheet" | tr ',' '\n' | tr -d '\r' | grep '^/' || true); do
+        n=$((n + 1))
+        [ -e "$f" ] || err "$key references a missing file: $f"
+        case "$f" in
+            *.bam) [ -e "$f.bai" ] || [ -e "${f%.bam}.bai" ] || warn "no index next to $f" ;;
+        esac
+    done
+    ok "$key: checked $n input paths"
 done
 for key in vep_cache vep_plugins; do
     val="$(param "$key")"
