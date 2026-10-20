@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1060" viewBox="0 0 1800 1060" role="img" aria-labelledby="title desc">
+<title id="title">NeoadjVax somatic pipeline map</title>
+<desc id="desc">Metro map of the somatic neoantigen pipeline. Tumour and normal DNA (FASTQ or aligned BAM) go through QC, trimming, BWA-MEM, duplicate marking and BQSR, then Mutect2 with orientation and contamination filtering to a PASS somatic VCF. That VCF feeds three lines that meet at pVACseq: VEP, bam-readcount and vcf-readcount-annotator; germline calling around somatic sites and WhatsHap phasing for the proximal-variant VCF; and HLA-HD typing of the normal. Sequenza purity from the samplesheet goes to pVACseq, and ploidy and segment copy number to the CCF table. Repeated input stations denote the same input, not separate dependencies.</desc>
+<style>
+:root {
+  --bg: #ffffff;
+  --ink: #20303d;
+  --heading: #20303d;
+  --muted: #5b6b7a;
+  --divider: #dbe2e7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --ink: #e6edf3;
+    --heading: #e6edf3;
+    --muted: #9aa7b4;
+    --divider: #30363d;
+  }
+}
+text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
+.title {font-size:38px;font-weight:700}
+.subtitle {font-size:20px;fill:var(--muted)}
+.section {font-size:18px;font-weight:700;letter-spacing:1.5px}
+.label {font-size:20px;font-weight:600}
+.note {font-size:16px;fill:var(--muted)}
+.small {font-size:17px;fill:var(--muted)}
+.track {fill:none;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+.station {fill:var(--bg);stroke:var(--ink);stroke-width:3}
+.pending {stroke-dasharray:10 12}
+.divider {stroke:var(--divider);stroke-width:1.5}
+</style>
+<text x="120" y="65" class="title" text-anchor="start">NeoadjVax somatic pipeline</text>
+<text x="120" y="101" class="subtitle" text-anchor="start">Nextflow DSL2 / tumour + matched normal DNA to pVACseq neoantigen candidates</text>
+<text x="1680" y="65" class="small" text-anchor="end">READ LEFT TO RIGHT</text>
+<path d="M120 130H1680" class="divider"/>
+<text x="120" y="170" class="section" text-anchor="start">01  DNA TO SOMATIC CALLS</text>
+<path d="M120 470H1680" class="divider"/>
+<text x="120" y="508" class="section" text-anchor="start">02  ANNOTATION, PHASING, HLA AND PVACSEQ</text>
+<path d="M120 960H1680" class="divider"/>
+<path d="M120 260 H910" class="track" stroke="#64748b"/>
+<path d="M500 380 H660 Q720 380 720 320 V260" class="track" stroke="#64748b"/>
+<path d="M910 260 H1680" class="track" stroke="#2563eb"/>
+<path d="M910 260 Q1000 260 1000 320 Q1000 380 1060 380 H1300 Q1360 380 1360 320 V260" class="track" stroke="#2563eb"/>
+<circle cx="120" cy="260" r="11" class="station"/>
+<text x="120" y="236" class="label" text-anchor="start">FASTQ</text>
+<text x="120" y="298" class="note" text-anchor="start">tumour + normal</text>
+<circle cx="330" cy="260" r="11" class="station"/>
+<text x="330" y="236" class="label" text-anchor="middle">FastQC, Trim Galore</text>
+<circle cx="520" cy="260" r="11" class="station"/>
+<text x="520" y="236" class="label" text-anchor="middle">BWA-MEM</text>
+<text x="520" y="298" class="note" text-anchor="middle">read group SM=tumor/normal</text>
+<circle cx="500" cy="380" r="11" class="station"/>
+<text x="500" y="420" class="label" text-anchor="middle">Aligned BAM</text>
+<text x="500" y="444" class="note" text-anchor="middle">AddOrReplaceReadGroups</text>
+<circle cx="720" cy="260" r="11" class="station"/>
+<text x="720" y="236" class="label" text-anchor="middle">MarkDuplicates</text>
+<circle cx="910" cy="260" r="11" class="station"/>
+<text x="910" y="236" class="label" text-anchor="middle">BQSR</text>
+<text x="896" y="298" class="note" text-anchor="end">dbSNP, Mills, 1000G</text>
+<circle cx="1130" cy="260" r="11" class="station"/>
+<text x="1130" y="236" class="label" text-anchor="middle">Mutect2</text>
+<text x="1130" y="298" class="note" text-anchor="middle">per chromosome, gnomAD + PoN</text>
+<circle cx="1180" cy="380" r="11" class="station"/>
+<text x="1180" y="420" class="label" text-anchor="middle">Contamination</text>
+<text x="1180" y="444" class="note" text-anchor="middle">GetPileupSummaries</text>
+<circle cx="1360" cy="260" r="11" class="station"/>
+<text x="1360" y="236" class="label" text-anchor="middle">FilterMutectCalls</text>
+<text x="1376" y="298" class="note" text-anchor="start">orientation model</text>
+<circle cx="1680" cy="260" r="11" class="station"/>
+<text x="1680" y="236" class="label" text-anchor="end">PASS somatic VCF</text>
+<text x="1680" y="298" class="note" text-anchor="end">one ALT per record</text>
+<path d="M120 580 H1680" class="track" stroke="#d97706"/>
+<path d="M120 690 H1180 Q1240 690 1240 630 V580" class="track" stroke="#16a34a"/>
+<path d="M120 800 H1220 Q1280 800 1280 740 V580" class="track" stroke="#7c3aed"/>
+<path d="M120 910 H1620 Q1680 910 1680 850 V580" class="track pending" stroke="#0d9488"/>
+<circle cx="120" cy="580" r="11" class="station"/>
+<text x="120" y="556" class="label" text-anchor="start">PASS somatic VCF</text>
+<circle cx="400" cy="580" r="11" class="station"/>
+<text x="400" y="556" class="label" text-anchor="middle">VEP</text>
+<text x="400" y="618" class="note" text-anchor="middle">Wildtype + Frameshift plugins</text>
+<circle cx="680" cy="580" r="11" class="station"/>
+<text x="680" y="556" class="label" text-anchor="middle">bam-readcount</text>
+<text x="680" y="618" class="note" text-anchor="middle">tumour and normal BAMs</text>
+<circle cx="960" cy="580" r="11" class="station"/>
+<text x="960" y="556" class="label" text-anchor="middle">vcf-readcount-annotator</text>
+<text x="960" y="618" class="note" text-anchor="middle">AD / DP / AF</text>
+<circle cx="120" cy="690" r="11" class="station"/>
+<text x="120" y="666" class="label" text-anchor="start">PASS somatic VCF</text>
+<circle cx="400" cy="690" r="11" class="station"/>
+<text x="400" y="666" class="label" text-anchor="middle">HaplotypeCaller</text>
+<text x="400" y="728" class="note" text-anchor="middle">normal, ±200 bp around somatic sites</text>
+<circle cx="680" cy="690" r="11" class="station"/>
+<text x="680" y="666" class="label" text-anchor="middle">WhatsHap --tag HP</text>
+<text x="680" y="728" class="note" text-anchor="middle">phased on the tumour BAM</text>
+<circle cx="960" cy="690" r="11" class="station"/>
+<text x="960" y="666" class="label" text-anchor="middle">VEP</text>
+<text x="960" y="728" class="note" text-anchor="middle">phased proximal VCF</text>
+<circle cx="120" cy="800" r="11" class="station"/>
+<text x="120" y="776" class="label" text-anchor="start">Normal BAM</text>
+<text x="120" y="838" class="note" text-anchor="start">or samplesheet hla_alleles</text>
+<circle cx="400" cy="800" r="11" class="station"/>
+<text x="400" y="776" class="label" text-anchor="middle">MHC reads</text>
+<text x="400" y="838" class="note" text-anchor="middle">chr6 MHC + unmapped</text>
+<circle cx="680" cy="800" r="11" class="station"/>
+<text x="680" y="776" class="label" text-anchor="middle">HLA-HD</text>
+<text x="680" y="838" class="note" text-anchor="middle">class I + II</text>
+<circle cx="960" cy="800" r="11" class="station"/>
+<text x="960" y="776" class="label" text-anchor="middle">pVACseq alleles</text>
+<text x="960" y="838" class="note" text-anchor="middle">DQA1-DQB1 / DPA1-DPB1 pairs</text>
+<circle cx="120" cy="910" r="11" class="station"/>
+<text x="120" y="886" class="label" text-anchor="start">Sequenza (samplesheet)</text>
+<text x="120" y="948" class="note" text-anchor="start">purity, ploidy, segments</text>
+<rect x="1216" y="562" width="88" height="36" rx="18" class="station"/>
+<text x="1260" y="522" class="note" text-anchor="middle">--tumor-purity, phased VCF</text>
+<text x="1260" y="550" class="label" text-anchor="middle">pVACseq</text>
+<circle cx="1680" cy="580" r="11" class="station"/>
+<text x="1680" y="556" class="label" text-anchor="end">CCF table</text>
+<text x="1662" y="618" class="note" text-anchor="end">ploidy + segment copy number</text>
+<path d="M120 1010 H164" class="track" stroke="#64748b"/>
+<text x="176" y="1016" class="small" text-anchor="start">DNA preprocessing</text>
+<path d="M372.4 1010 H416.4" class="track" stroke="#2563eb"/>
+<text x="428.4" y="1016" class="small" text-anchor="start">Somatic calling</text>
+<path d="M606.4 1010 H650.4" class="track" stroke="#d97706"/>
+<text x="662.4" y="1016" class="small" text-anchor="start">Readcounts and pVACseq</text>
+<path d="M904.8 1010 H948.8" class="track" stroke="#16a34a"/>
+<text x="960.8" y="1016" class="small" text-anchor="start">Proximal-variant phasing</text>
+<path d="M1221.6 1010 H1265.6" class="track" stroke="#7c3aed"/>
+<text x="1277.6" y="1016" class="small" text-anchor="start">HLA typing</text>
+<path d="M1409.6 1010 H1453.6" class="track pending" stroke="#0d9488"/>
+<text x="1465.6" y="1016" class="small" text-anchor="start">Sequenza inputs</text>
+</svg>
