@@ -9,7 +9,7 @@
  *     ─> SOMATIC_CALLING    Mutect2 + orientation + contamination, FilterMutectCalls, PASS
  *     ─> HLA_TYPING         HLA-HD on the normal (or samplesheet hla_alleles)
  *     ─> PROXIMAL_VARIANTS  germline near somatic sites, WhatsHap phasing, VEP
- *     ─> NEOANTIGENS        VEP, bam-readcount, pVACseq (Sequenza purity), CCF (ploidy/CN)
+ *     ─> NEOANTIGENS        VEP, bam-readcount (DNA + optional RNA), pVACseq (Sequenza purity), CCF (ploidy/CN)
  *
  * One samplesheet row per patient: see assets/samplesheet_schema.md, and
  * docs/ARCHITECTURE.md for why each step is there.
@@ -54,6 +54,13 @@ def validateSamplesheet(path) {
             }
         }
 
+        // RNA BAMs only feed bam-readcount; they are not realigned, so they
+        // must already be on the same GRCh38 reference, with an index.
+        ['rna_baseline_bam', 'rna_week6_bam'].findAll { row[it] }.each { col ->
+            if (!file(row[col]).exists()) error "samplesheet: ${id} ${col} not found: ${row[col]}"
+            if (!bamIndex(row[col])) error "samplesheet: ${id} ${col} has no index (${row[col]}.bai): run samtools index on it"
+        }
+
         if (!row.purity) error "samplesheet: ${id} has no purity (Sequenza cellularity, between 0 and 1)"
         if (!isNumber(row.purity) || !((row.purity as double) > 0 && (row.purity as double) <= 1)) {
             error "samplesheet: ${id} purity '${row.purity}' must be a number in (0, 1]"
@@ -72,6 +79,13 @@ def validateSamplesheet(path) {
         }
     }
     rows
+}
+
+// <x>.bam.bai or <x>.bai beside a BAM, or null.
+def bamIndex(path) {
+    def candidates = [file("${path}.bai")]
+    if (path.endsWith('.bam')) candidates << file(path[0..-5] + '.bai')
+    candidates.find { it.exists() }
 }
 
 // A VCF param that must exist with its .tbi beside it; returns [vcf, tbi].
@@ -125,6 +139,15 @@ workflow {
               row.sequenza_segments ? file(row.sequenza_segments) : [])
     }
 
+    // ---- optional tumour RNA BAMs, one list per patient (may be empty):
+    //      [meta, [[sample_type, bam, bai], ...]] ----
+    rna_ch = samples_ch.map { row ->
+        tuple([id: row.patient_id],
+              ['rna_baseline', 'rna_week6']
+                  .findAll { row["${it}_bam"] }
+                  .collect { st -> [st, file(row["${st}_bam"]), bamIndex(row["${st}_bam"])] })
+    }
+
     PREPROCESS_DNA(samples_ch, fasta, fai, dict, bwa_index, known*.get(0), known*.get(1))
     bams_ch = PREPROCESS_DNA.out.bam
     tumor_bam_ch  = bams_ch.filter { it[1] == 'tumor' }.map { meta, st, bam, bai -> tuple(meta, bam, bai) }
@@ -139,7 +162,7 @@ workflow {
                       fasta, fai, dict, vep_cache, vep_plugins)
 
     NEOANTIGENS(SOMATIC_CALLING.out.pass_vcf, bams_ch, PROXIMAL_VARIANTS.out.phased_vcf,
-                HLA_TYPING.out.alleles, clinical_ch, fasta, fai, vep_cache, vep_plugins)
+                HLA_TYPING.out.alleles, clinical_ch, rna_ch, fasta, fai, vep_cache, vep_plugins)
 
     workflow.onComplete = {
         log.info "NeoadjVax finished: status: ${workflow.success ? 'OK' : 'FAILED'}: results: ${params.outdir}"

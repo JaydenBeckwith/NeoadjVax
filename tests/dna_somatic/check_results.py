@@ -23,6 +23,8 @@ def check(manifest, trace, outdir):
     fastq = len(manifest["fastq_patients"])
     typed = len(manifest["hla_typed_patients"])
     scatter = len(manifest["scatter"])
+    rna = manifest.get("rna_bams", {})
+    week6 = sum("rna_week6" in timepoints for timepoints in rna.values())
     expected = {
         "PREPROCESS_DNA:TRIM_GALORE": fastq * 2,
         "PREPROCESS_DNA:BWA_MEM_ALIGN": fastq * 2,
@@ -41,8 +43,9 @@ def check(manifest, trace, outdir):
         "PROXIMAL_VARIANTS:WHATSHAP_PHASE": patients,
         "PROXIMAL_VARIANTS:VEP_ANNOTATE": patients,
         "NEOANTIGENS:VEP_ANNOTATE": patients,
-        "NEOANTIGENS:BAM_READCOUNT": patients * 2,
+        "NEOANTIGENS:BAM_READCOUNT": patients * 2 + sum(len(t) for t in rna.values()),
         "NEOANTIGENS:VCF_READCOUNT_ANNOTATOR": patients,
+        "NEOANTIGENS:RNA_WEEK6_ANNOTATOR": week6,
         "NEOANTIGENS:PVACSEQ": patients,
         "NEOANTIGENS:ANNOTATE_CCF": patients,
     }
@@ -65,6 +68,10 @@ def check(manifest, trace, outdir):
                 raise ValueError(f"Missing per-patient output: {path}")
         if "no biological analysis" not in paths[4].read_text():
             raise ValueError(f"Missing explicit stub marker: {paths[4]}")
+        # the stub CCF table names the week 6 columns only when it was given that VCF
+        has_week6 = "RNA VAF (week 6)" in paths[3].read_text()
+        if has_week6 != ("rna_week6" in rna.get(patient, [])):
+            raise ValueError(f"{paths[3]}: week 6 RNA columns {'present' if has_week6 else 'missing'} for {patient}")
     print(f"PASS: {patients} patients reached pVACseq and CCF annotation; wiring only, no biological predictions.")
 
 

@@ -94,19 +94,33 @@ Published: `<id>/pvacseq_input/<id>.phased_proximal.vcf.gz(.tbi)`.
 
 1. VEP on the PASS somatic VCF with pVACseq's required options and the
    Wildtype and Frameshift plugins.
-2. bam-readcount on the tumour and normal BAMs, via
+2. bam-readcount on the tumour and normal DNA BAMs and on any RNA BAMs in
+   the samplesheet (`rna_baseline_bam`, `rna_week6_bam`), via
    `bam_readcount_helper.py` from `mgibio/bam_readcount_helper-cwl:1.1.1`,
    as pVACtools' "Adding coverage data to your VCF" describes (min base
-   quality 20 by default).
-3. `vcf-readcount-annotator` (VAtools) writes the counts into AD/DP/AF of
-   the `tumor` and `normal` columns, which pVACseq uses for its DNA
-   VAF/depth filters and its clonality tiering.
+   quality 20 by default). RNA is counted at the ALT alleles of the
+   `tumor` genotype column.
+3. `vcf-readcount-annotator` (VAtools) writes the DNA counts into AD/DP/AF
+   of the `tumor` and `normal` columns, which pVACseq uses for its DNA
+   VAF/depth filters and its clonality tiering, and the baseline RNA
+   counts into RAD/RDP/RAF of the `tumor` column. pVACseq reads one RNA
+   sample, so only baseline RNA reaches it. With baseline RNA present,
+   pVACseq's defaults apply: `filtered.tsv` keeps only candidates with
+   tumour RNA depth > 10 and RNA VAF > 0.25 (`--trna-cov`, `--trna-vaf`;
+   change them through `--pvacseq_extra_args`), and the aggregated report
+   tiers a candidate with RNA VAF 0 as NoExpr. `all_epitopes.tsv` and the
+   aggregated report keep every candidate. Week 6 RNA counts go into a
+   separate copy of the VCF (not passed to pVACseq).
 4. pVACseq with the HLA alleles, the phased proximal VCF and
    `--tumor-purity` from the samplesheet. Default predictors are
    MHCflurry, MHCflurryEL, NetMHCpan, NetMHCpanEL, NetMHCIIpan and
    NetMHCIIpanEL, using the standalone IEDB install inside the pVACtools
    image (`--pvacseq_iedb_install_dir /opt/iedb`).
-5. `bin/annotate_ccf.py` adds copy-number and CCF columns to each
+5. When the patient has week 6 RNA, `bin/add_rna_timepoint.py` adds
+   `RNA Depth (week 6)` and `RNA VAF (week 6)` to each aggregated report,
+   matching on pVACseq's variant ID. pVACseq's own `RNA Depth` and
+   `RNA VAF` columns are the baseline.
+6. `bin/annotate_ccf.py` adds copy-number and CCF columns to each
    aggregated report. pVACseq's own clonality call is
    `purity × 0.5` as the clonal VAF, i.e. it assumes every variant sits
    on a diploid segment; this step corrects for copy number using the
@@ -126,9 +140,10 @@ Published: `<id>/pvacseq/` (the full pVACseq output),
 
 ## Not covered
 
-- No RNA: pVACseq gets no expression (TX/GX) or RNA readcounts, so its
-  expression filters do not apply. Adding an RNA FASTQ column for
-  quantification and RNA bam-readcount is the natural next step.
+- No RNA alignment or expression: RNA comes in as aligned BAMs and only
+  read counts are taken. pVACseq gets no gene or transcript expression
+  (GX/TX), so its expression filters and the Allele Expr tier check do
+  not apply.
 - No HLA-LOH and no in-pipeline Sequenza; purity, ploidy and segments
   come from existing Sequenza runs.
 - One FASTQ pair per sample.

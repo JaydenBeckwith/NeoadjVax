@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1060" viewBox="0 0 1800 1060" role="img" aria-labelledby="title desc">
 <title id="title">NeoadjVax somatic pipeline map</title>
-<desc id="desc">Metro map of the somatic neoantigen pipeline. Tumour and normal DNA (FASTQ or aligned BAM) go through QC, trimming, BWA-MEM, duplicate marking and BQSR, then Mutect2 with orientation and contamination filtering to a PASS somatic VCF. That VCF feeds three lines that meet at pVACseq: VEP, bam-readcount and vcf-readcount-annotator; germline calling around somatic sites and WhatsHap phasing for the proximal-variant VCF; and HLA-HD typing of the normal. Sequenza purity from the samplesheet goes to pVACseq, and ploidy and segment copy number to the CCF table. Repeated input stations denote the same input, not separate dependencies.</desc>
+<desc id="desc">Metro map of the somatic neoantigen pipeline. Tumour and normal DNA (FASTQ or aligned BAM) go through QC, trimming, BWA-MEM, duplicate marking and BQSR, then Mutect2 with orientation and contamination filtering to a PASS somatic VCF. That VCF feeds three lines that meet at pVACseq: VEP, bam-readcount on the DNA and optional baseline and week 6 RNA BAMs, and vcf-readcount-annotator; germline calling around somatic sites and WhatsHap phasing for the proximal-variant VCF; and HLA-HD typing of the normal. Sequenza purity from the samplesheet goes to pVACseq, and ploidy and segment copy number to the CCF table, which also carries the week 6 RNA counts. Repeated input stations denote the same input, not separate dependencies.</desc>
 <style>
 :root {
   --bg: #ffffff;
@@ -81,10 +81,10 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <text x="400" y="618" class="note" text-anchor="middle">Wildtype + Frameshift plugins</text>
 <circle cx="680" cy="580" r="11" class="station"/>
 <text x="680" y="556" class="label" text-anchor="middle">bam-readcount</text>
-<text x="680" y="618" class="note" text-anchor="middle">tumour and normal BAMs</text>
+<text x="680" y="618" class="note" text-anchor="middle">DNA + baseline/week 6 RNA BAMs</text>
 <circle cx="960" cy="580" r="11" class="station"/>
 <text x="960" y="556" class="label" text-anchor="middle">vcf-readcount-annotator</text>
-<text x="960" y="618" class="note" text-anchor="middle">AD / DP / AF</text>
+<text x="960" y="618" class="note" text-anchor="middle">AD/DP/AF + RNA RAD/RDP/RAF</text>
 <circle cx="120" cy="690" r="11" class="station"/>
 <text x="120" y="666" class="label" text-anchor="start">PASS somatic VCF</text>
 <circle cx="400" cy="690" r="11" class="station"/>
@@ -116,7 +116,7 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <text x="1260" y="550" class="label" text-anchor="middle">pVACseq</text>
 <circle cx="1680" cy="580" r="11" class="station"/>
 <text x="1680" y="556" class="label" text-anchor="end">CCF table</text>
-<text x="1662" y="618" class="note" text-anchor="end">ploidy + segment copy number</text>
+<text x="1662" y="618" class="note" text-anchor="end">copy number + week 6 RNA columns</text>
 <path d="M120 1010 H164" class="track" stroke="#64748b"/>
 <text x="176" y="1016" class="small" text-anchor="start">DNA preprocessing</text>
 <path d="M372.4 1010 H416.4" class="track" stroke="#2563eb"/>
