@@ -16,9 +16,11 @@ tumour + normal DNA (FASTQ, or aligned BAM)
   │                     or the samplesheet's hla_alleles
   ├─ PROXIMAL_VARIANTS  HaplotypeCaller on the normal around somatic sites
   │                     → WhatsHap phasing on the tumour BAM → VEP
-  └─ NEOANTIGENS        VEP → bam-readcount (tumour, normal) → vcf-readcount-annotator
-                        → pVACseq (--tumor-purity from Sequenza,
-                          --phased-proximal-variants-vcf) → CCF from ploidy/segments
+  └─ NEOANTIGENS        VEP → bam-readcount (tumour + normal DNA, optional baseline
+                        and week 6 RNA BAMs) → vcf-readcount-annotator
+                        → pVACseq (--tumor-purity from Sequenza, baseline RNA counts,
+                          --phased-proximal-variants-vcf) → week 6 RNA columns
+                        → CCF from ploidy/segments
 ```
 
 Sequenza is not run here: purity (and optionally ploidy and the segments

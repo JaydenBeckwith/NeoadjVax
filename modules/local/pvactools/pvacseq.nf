@@ -53,7 +53,9 @@ process PVACSEQ {
 }
 
 // Cancer-cell-fraction estimate per aggregated pVACseq candidate, which is
-// where ploidy and copy number come in. See bin/annotate_ccf.py.
+// where ploidy and copy number come in (bin/annotate_ccf.py). When the
+// patient has a week 6 RNA BAM, its RNA depth and VAF are joined on first
+// (bin/add_rna_timepoint.py); pVACseq's own RNA columns are the baseline.
 process ANNOTATE_CCF {
     tag "${meta.id}"
     label 'process_low'
@@ -61,7 +63,7 @@ process ANNOTATE_CCF {
     publishDir "${params.outdir}/${meta.id}/pvacseq_ccf", mode: 'copy'
 
     input:
-    tuple val(meta), path(pvacseq_dir), val(purity), val(ploidy), val(sex), path(segments)
+    tuple val(meta), path(pvacseq_dir), val(purity), val(ploidy), val(sex), path(segments), path(rna_week6_vcf)
 
     output:
     tuple val(meta), path("*.ccf.tsv"), optional: true, emit: tsv
@@ -75,6 +77,10 @@ process ANNOTATE_CCF {
     for report in ${pvacseq_dir}/*/tumor.*.all_epitopes.aggregated.tsv; do
         [ -e "\$report" ] || continue
         mhc_class=\$(basename "\$report" | cut -d. -f2)
+        if [ -n "${rna_week6_vcf}" ]; then
+            add_rna_timepoint.py "\$report" --vcf ${rna_week6_vcf} --label "week 6" -o \${mhc_class}.week6.tsv
+            report=\${mhc_class}.week6.tsv
+        fi
         annotate_ccf.py "\$report" \\
             --purity ${purity} ${ploidy_arg} ${sex_arg} ${segments_arg} \\
             -o ${meta.id}.\${mhc_class}.aggregated.ccf.tsv
@@ -82,7 +88,8 @@ process ANNOTATE_CCF {
     """
 
     stub:
+    def week6_columns = rna_week6_vcf ? '\\tRNA Depth (week 6)\\tRNA VAF (week 6)' : ''
     """
-    touch ${meta.id}.Combined.aggregated.ccf.tsv
+    printf 'ID${week6_columns}\\tCCF\\n' > ${meta.id}.Combined.aggregated.ccf.tsv
     """
 }

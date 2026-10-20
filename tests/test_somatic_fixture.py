@@ -26,7 +26,7 @@ class SomaticFixture(unittest.TestCase):
         first = fixture.generate(self.root / "one", sam_only=True)
         second = fixture.generate(self.root / "two", sam_only=True)
         self.assertEqual((self.root / "one/genome.fa").read_bytes(), (self.root / "two/genome.fa").read_bytes())
-        self.assertEqual({i["kind"] for i in first["inputs"]}, {"bam", "fastq"})
+        self.assertEqual({i["kind"] for i in first["inputs"]}, {"bam", "fastq", "rna_bam"})
         self.assertFalse(second["bam_generation_complete"])
 
     def test_samplesheet_carries_purity_and_hla_bypass(self):
@@ -37,6 +37,8 @@ class SomaticFixture(unittest.TestCase):
         self.assertTrue(rows["P1"]["hla_alleles"])
         self.assertFalse(rows["P2"]["hla_alleles"])
         self.assertTrue(rows["P2"]["tumor_r1"] and not rows["P2"]["tumor_bam"])
+        self.assertTrue(rows["P1"]["rna_baseline_bam"] and rows["P1"]["rna_week6_bam"])
+        self.assertFalse(rows["P2"]["rna_baseline_bam"] or rows["P2"]["rna_week6_bam"])
 
     def test_sam_coordinates_pairs_and_sequences(self):
         manifest = fixture.generate(self.root / "data", sam_only=True)

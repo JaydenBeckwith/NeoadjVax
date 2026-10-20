@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Generate deterministic synthetic tumour/normal DNA inputs; no patient data.
 
-P1 enters as already-aligned BAMs with HLA alleles in the samplesheet and a
-Sequenza segments file; P2 enters as FASTQ pairs with no HLA alleles, so it
+P1 enters as already-aligned BAMs with HLA alleles in the samplesheet, a
+Sequenza segments file, and baseline and week 6 RNA BAMs (copies of its
+tumour BAM; the week 6 index is named <x>.bai rather than <x>.bam.bai); P2 enters as FASTQ pairs with no HLA alleles, so it
 goes through alignment and HLA-HD. Reference/resource files are empty
 placeholders: only valid with nextflow -stub-run.
 """
@@ -94,6 +95,13 @@ def generate(root, samtools="samtools", sam_only=False):
                 row[f"{sample_type}_r1"], row[f"{sample_type}_r2"] = str(r1), str(r2)
                 inputs.append({"path": str(r1), "sample": sample, "kind": "fastq", "reads": PAIRS})
         if patient == "P1":
+            for timepoint, index_name in (("rna_baseline", "P1_rna_baseline.bam.bai"), ("rna_week6", "P1_rna_week6.bai")):
+                rna_bam = root / f"P1_{timepoint}.bam"
+                if not sam_only:
+                    shutil.copy(root / "P1_tumor.bam", rna_bam)
+                    shutil.copy(root / "P1_tumor.bam.bai", root / index_name)
+                row[f"{timepoint}_bam"] = str(rna_bam)
+                inputs.append({"path": str(rna_bam), "sample": f"P1_{timepoint}", "kind": "rna_bam", "reads": PAIRS * 2})
             segments = root / "P1_segments.txt"
             segments.write_text('"chromosome"\t"start.pos"\t"end.pos"\t"CNt"\t"A"\t"B"\n"chr1"\t1\t10000\t3\t2\t1\n')
             row.update(purity="0.62", ploidy="3.1", sequenza_segments=str(segments), sex="female",
@@ -103,10 +111,11 @@ def generate(root, samtools="samtools", sam_only=False):
         rows.append(row)
 
     fields = ["patient_id", "tumor_r1", "tumor_r2", "normal_r1", "normal_r2", "tumor_bam", "normal_bam",
-              "purity", "ploidy", "sequenza_segments", "sex", "hla_alleles"]
+              "rna_baseline_bam", "rna_week6_bam", "purity", "ploidy", "sequenza_segments", "sex", "hla_alleles"]
     write_csv(root / "samplesheet.csv", fields, rows)
     manifest = {"synthetic": True, "test_type": "wiring_only", "patients": list(PATIENTS),
-                "fastq_patients": ["P2"], "hla_typed_patients": ["P2"], "scatter": list(SCATTER),
+                "fastq_patients": ["P2"], "hla_typed_patients": ["P2"],
+                "rna_bams": {"P1": ["rna_baseline", "rna_week6"]}, "scatter": list(SCATTER),
                 "inputs": inputs, "bam_generation_complete": not sam_only}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
