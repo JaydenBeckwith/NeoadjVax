@@ -1,170 +1,78 @@
 # NeoadjVax
 
-Neoadjuvant melanoma pipelines for determining neoantigen candidates for
-vaccine development.
+Somatic neoantigen prediction for neoadjuvant melanoma vaccine work:
+tumour and matched-normal DNA in, ranked pVACseq candidates out.
+Nextflow DSL2, built to run on NCI Gadi (PBS Pro + Singularity).
 
-Orchestrated with Nextflow DSL2. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-for the full pipeline design, a diagram of how the branches fit together,
-and the remaining open decisions for ERV peptide generation.
-Splicing now combines DNA SpliceAI and RNA LeafCutter with splice2neo
-peptide-context prediction; see [the splicing guide](docs/SPLICING.md). See
-[`docs/RUNNING_ON_GADI.md`](docs/RUNNING_ON_GADI.md) for how to actually
-launch this on Gadi: it's not a `qsub script.sh` like the original
-scripts; Nextflow submits every step as its own PBS job for you, but
-compute nodes having no external network means a one-time container
-pre-caching step is required first. See
-[`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) for where every external
-reference file (genome, known-sites VCFs, VEP cache, AGFusion database,
-and so on) comes from and which `--param` passes it in.
+```
+tumour + normal DNA (FASTQ, or aligned BAM)
+  │
+  ├─ PREPROCESS_DNA     FastQC → Trim Galore → BWA-MEM → MarkDuplicates → BQSR
+  ├─ SOMATIC_CALLING    Mutect2 (per chromosome, gnomAD + PoN) → read-orientation model
+  │                     + contamination → FilterMutectCalls → PASS, normalised
+  ├─ HLA_TYPING         HLA-HD on the normal (class I + II incl. DQA1/DPA1),
+  │                     or the samplesheet's hla_alleles
+  ├─ PROXIMAL_VARIANTS  HaplotypeCaller on the normal around somatic sites
+  │                     → WhatsHap phasing on the tumour BAM → VEP
+  └─ NEOANTIGENS        VEP → bam-readcount (tumour, normal) → vcf-readcount-annotator
+                        → pVACseq (--tumor-purity from Sequenza,
+                          --phased-proximal-variants-vcf) → CCF from ploidy/segments
+```
 
-[![NeoadjVax metromap: core, discovery and HLA-LOH workflows, with RNA input from any timepoint](assets/neoadjvax-pipeline-overview.svg)](assets/neoadjvax-pipeline-overview.svg)
+Sequenza is not run here: purity (and optionally ploidy and the segments
+file) come in through the samplesheet from your existing Sequenza runs.
 
 ## Quick start
 
 ```bash
-# once, from a Gadi LOGIN node (see docs/RUNNING_ON_GADI.md)
+# once, from a Gadi login node (compute nodes have no network)
 bash bin/prefetch_containers.sh
 
-# then either qsub bin/submit_nextflow_gadi.pbs, or run this directly
-# in a screen/tmux session on the login node:
+# copy and fill in the params file, check it, then launch
+cp assets/params_somatic_gadi.example.yaml /scratch/jo11/$USER/somatic.yaml
+bash bin/run_somatic_gadi.sh --check /scratch/jo11/$USER/somatic.yaml
+bash bin/run_somatic_gadi.sh /scratch/jo11/$USER/somatic.yaml
+```
+
+Or directly:
+
+```bash
 nextflow run main.nf -profile gadi \
-    --dna_samplesheet dna_samples.csv \
-    --rna_samplesheet rna_samples.csv \
-    --vep_cache /path/to/vep_cache \
-    --vep_plugins /path/to/vep_plugins \
+    --samplesheet samples.csv \
+    --germline_resource af-only-gnomad.hg38.vcf.gz \
+    --panel_of_normals 1000g_pon.hg38.vcf.gz \
+    --contamination_sites small_exac_common_3.hg38.vcf.gz \
+    --vep_cache /path/to/vep_cache --vep_plugins /path/to/vep_plugins \
+    --hlahd_container /path/to/hlahd.sif \
     --outdir results/
 ```
 
-See `assets/samplesheet_schema.md` for the samplesheet formats, and
-`nextflow.config` for every tunable default (reference paths, container
-images, HLA/pVACseq settings, per-branch on/off switches).
+## Documentation
 
-## Branches
+- [`assets/samplesheet_schema.md`](assets/samplesheet_schema.md): the samplesheet, including purity, ploidy and segments.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): each step, why it is there, and the outputs.
+- [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md): every reference file and container, and where to get it.
+- [`docs/RUNNING_ON_GADI.md`](docs/RUNNING_ON_GADI.md): launching and monitoring on Gadi.
+- [`containers/hlahd/README.md`](containers/hlahd/README.md): building the HLA-HD image from your licensed download.
 
-| `--run_*` flag | Status |
-|---|---|
-| `run_dna_variant_calling` | Ported from the original DNA script, default on |
-| `run_rna_variant_calling` | Ported from the original RNA PBS script, default on |
-| `run_pvacseq_core` | New RNA-support matching + pVACseq, default on |
-| `run_splicing_neoantigens` | Optional DNA SpliceAI + RNA LeafCutter → splice2neo peptide contexts; GENCODE/normal filtering. See [splicing guide](docs/SPLICING.md) |
-| `run_fusion_neoantigens` | New, default off: STAR-Fusion + Arriba calling, AGFusion annotation and pVACfuse binding prediction are all real; see [fusion guide](docs/FUSION.md) |
-| `run_erv_neoantigens` | New, default off: ERV/TE quantification (own STAR pass + Telescope) is real, peptide step is a stub |
-| `run_erv_dna` | Optional ERVcaller v1.4 insertion calling on tumour/normal DNA BAMs; separate from RNA expression and peptide prediction |
-| `run_purity_ploidy` | Fully ported from `Sequenza_tools`, default off: WGS/200bp bins only (WES errors at launch, see `docs/ARCHITECTURE.md`) |
-| `run_hla_loh` | Ported from [`NeoadjLOH`](https://github.com/JaydenBeckwith/NeoadjLOH), default off: independently runnable, see `assets/samplesheet_schema.md` |
+## Tests
 
-`run_purity_ploidy` and `run_hla_loh` don't need the DNA/RNA branches above
-turned on: `run_hla_loh` can run entirely standalone via
-`--hla_loh_samplesheet`, or chained off `--run_dna_variant_calling` with
-purity/ploidy from `--purity_ploidy_csv`.
-
-### Picking branches with `--pipelines`
-
-Instead of setting each `--run_*` flag yourself, `--pipelines` takes a
-comma-separated list of friendly names and turns on exactly the flags those
-names need (and turns everything else off: it's authoritative once set).
-Matching is case/spacing/punctuation-insensitive, so `geneFusion`,
-`gene-fusion`, `Gene Fusion` and `gene_fusion` all resolve to the same entry.
+Wiring only, never biological accuracy:
 
 ```bash
-# just gene fusion calling
-nextflow run main.nf -profile gadi --pipelines gene_fusion ...
-
-# the core DNA+RNA neoantigen pipeline plus fusion calling
-nextflow run main.nf -profile gadi --pipelines somatic_neoantigen,gene_fusion ...
+python -m unittest discover -s tests -p 'test_*.py'
+python bin/check_nf_structure.py .
+python tests/dna_somatic/make_fixture.py --outdir tests/dna_somatic/generated
+NXF_SYNTAX_PARSER=v1 nextflow -c tests/dna_somatic/smoke.config run main.nf -stub-run
+python tests/dna_somatic/check_results.py --manifest tests/dna_somatic/generated/manifest.json \
+    --trace test-results/dna_somatic/trace.tsv --outdir test-results/dna_somatic
 ```
 
-| Name(s) | Turns on |
-|---|---|
-| `dna_variant_calling` | `run_dna_variant_calling` |
-| `rna_variant_calling` | `run_rna_variant_calling` |
-| `somatic_neoantigen`, `core_neoantigen`, `pvacseq_core` | `run_dna_variant_calling` + `run_rna_variant_calling` + `run_pvacseq_core` (pVACseq core needs both: see `docs/ARCHITECTURE.md`) |
-| `splicing`, `splicing_neoantigen` | `run_splicing_neoantigens` |
-| `fusion`, `gene_fusion`, `fusion_neoantigen` | `run_fusion_neoantigens` |
-| `erv`, `erv_neoantigen` | `run_erv_neoantigens` |
-| `erv_dna`, `ervcaller` | `run_erv_dna` (standalone with BAMs; can also reuse the DNA branch's BAMs) |
-| `purity_ploidy`, `sequenza` | `run_purity_ploidy` |
-| `hla_loh`, `loh` | `run_hla_loh` |
+See [`tests/dna_somatic/README.md`](tests/dna_somatic/README.md).
 
-Leave `--pipelines` unset to keep controlling each branch with its own
-`--run_*` flag, exactly as before: nothing changes for existing invocations.
+## History
 
-### Splicing peptide candidates
-
-DNA WES/WGS somatic VCF → SpliceAI → predicted splice junctions, combined
-with RNA LeafCutter junction evidence from **any timepoint**, then splice2neo
-transcript/CDS annotation and peptide-context prediction. GENCODE and a
-supplied normal/GTEx junction panel exclude known junctions. These are
-research candidates, not HLA-ranked or validated neoantigens.
-
-Use `--pipelines splicing` with supplied DNA VCFs, or
-`--pipelines dna_variant_calling,splicing` to call somatic variants first.
-Existing annotated `spliceai_vcf` and strand-aware `leafcutter_counts`
-are also supported. See [setup and input examples](docs/SPLICING.md).
-
-### Gene fusion calling
-
-`--run_fusion_neoantigens` runs the caller(s) named in `--fusion_callers`
-(default `starfusion,arriba`, comma-separated) in parallel per
-patient-timepoint. Each caller runs its own dedicated STAR alignment pass:
-STAR-Fusion needs its own CTAT genome resource lib (`--ctat_resource_lib`),
-Arriba needs relaxed multimapping plus chimeric-alignment flags: and their
-results are kept separate all the way through, tagged and published to
-per-caller subdirectories, rather than merged into one consensus call set.
-The samplesheet's `rna_bam`/`rna_fastq_r1`+`rna_fastq_r2` columns, or a
-caller's own precomputed `starfusion_tsv`/`arriba_tsv`, both work as input.
-AGFusion annotation and pVACfuse binding prediction downstream of either
-caller are implemented; a reference-matched pilot is still required. See [the fusion guide](docs/FUSION.md)
-for exact CLI usage, the AGFusion database-release caveat (GENCODE v46 needs
-a built, not downloaded, database), the now-mandatory Arriba blacklist, and
-HLA-sourcing options.
-
-### ERV/transposable-element calling
-
-`--run_erv_neoantigens` quantifies endogenous retrovirus / transposable
-element expression with [Telescope](https://github.com/mlbendall/telescope),
-the tool most published HERV-in-cancer studies use for this. It runs its own
-dedicated STAR pass (relaxed multimapping: ERV loci are repetitive, so this
-can't reuse `RNA_VARIANT_CALLING`'s BAM, which discards multimappers) and an
-explicit `samtools collate` step before Telescope, which specifically
-requires collated rather than coordinate-sorted input. Point
-`--erv_annotation_gtf` at one of Telescope's own official GRCh38 builds from
-[`mlbendall/telescope_annotation_db`](https://github.com/mlbendall/telescope_annotation_db/tree/master/builds)
-(`retro.hg38.v1` is the recommended default). Quantification runs
-end-to-end; turning expressed ERV loci into candidate peptides
-(`ERV_TO_PEPTIDE`) is still an open design decision with two published
-approaches to choose between: see `docs/ARCHITECTURE.md`.
-
-Use `--erv_generate_peptides false` to finish successfully after RNA
-quantification without invoking the unfinished peptide step.
-
-### DNA ERV/TE insertions (ERVcaller)
-
-`--pipelines erv_dna` adds [ERVcaller](https://github.com/xunchen85/ERVcaller)
-for non-reference insertion detection and genotyping. It calls tumour and
-matched-normal DNA independently, using the existing DNA samplesheet's BAMs
-or BAMs generated by `--pipelines dna_variant_calling,erv_dna`.
-
-DNA insertion evidence complements Telescope RNA expression; neither alone
-establishes a tumour-specific peptide. Outputs include the original VCF,
-an evidence table, logs and run metadata. There is no automatic somatic
-subtraction or DNA/RNA locus intersection.
-
-The branch requires an ERVcaller container, a selected TE FASTA, and the
-actual read length. See [DNA ERV setup and run instructions](docs/ERV_DNA.md)
-for the container recipe, examples, checks and interpretation limits.
-For DNA and RNA analysis together, select `--pipelines erv_dna,erv`
-and `--erv_generate_peptides false`.
-
-## CI smoke test
-
-[CI](.github/workflows/ci.yml) generates eight valid synthetic DNA/RNA BAMs
-for two patients and four RNA timepoints, then runs the real `main.nf`
-entry workflow with `--pipelines somatic_neoantigen -stub-run`. Analysis
-tools are deliberately stubbed: this tests wiring, not biological accuracy.
-Assertions check task counts and every timepoint's output; logs and fixtures
-are uploaded on failure. See [local run instructions](tests/dna_somatic/README.md).
-
-Core VEP and pVACseq outputs are now separated by RNA timepoint under
-`<patient>/dna_variants/<timepoint>/` and `<patient>/pvacseq/<timepoint>/`,
-preventing longitudinal outputs from overwriting one another.
+Up to v0.1.0-dev this repository also carried RNA variant calling,
+splicing, gene fusion, ERV/TE, in-pipeline Sequenza and HLA-LOH branches.
+They were removed in v0.2.0-dev to focus on the somatic path; they remain
+in the git history on `main` before the somatic rebuild.

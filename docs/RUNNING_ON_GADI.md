@@ -27,8 +27,8 @@ PBS_PROJECT=jo11 bash bin/prefetch_containers.sh
 ```
 
 This pulls every container the pipeline references (everything in
-`nextflow.config`'s `containers {}` block except the four `.sif` files
-that already exist on Jayden's `/scratch/jo11`) into
+`nextflow.config`'s `containers {}` block except the picard and GATK
+`.sif` files that already exist on Jayden's `/scratch/jo11`) into
 `/scratch/jo11/$USER/nxf_singularity_cache`: the same path
 `conf/gadi.config`'s `singularity.cacheDir` points Nextflow at, using the
 exact filenames Nextflow itself would generate (confirmed against
@@ -73,7 +73,7 @@ ssh neoadjvax.${USER}.jo11.ps.gadi.nci.org.au
 
 cd /scratch/jo11/$USER/NeoadjVax          # wherever the repo is cloned
 cp assets/params_somatic_gadi.example.yaml /scratch/jo11/$USER/somatic.yaml
-# edit somatic.yaml: samplesheets, outdir, vep_cache, vep_plugins
+# edit somatic.yaml: samplesheet, outdir, GATK resources, VEP, hlahd_container
 
 bash bin/run_somatic_gadi.sh --check /scratch/jo11/$USER/somatic.yaml   # preflight only
 bash bin/run_somatic_gadi.sh /scratch/jo11/$USER/somatic.yaml           # launch in tmux
@@ -89,23 +89,25 @@ same work directory (`/scratch/jo11/$USER/neoadjvax_work`).
 The same params file works for Option A:
 `qsub -v PARAMS_FILE=/scratch/jo11/$USER/somatic.yaml bin/submit_nextflow_gadi.pbs`.
 
-### Mutational track checklist
+### Checklist before the first real run
 
-`--pipelines somatic_neoantigen` covers DNA calling, RNA calling and
-pVACseq. Before its first real run:
-
-1. `bash bin/prefetch_containers.sh somatic` on a login node. This pulls
-   only BWA, Trim Galore, FastQC, VEP 111, pVACtools 7.1.3 and xHLA.
-2. Use a VEP cache that matches the container: `homo_sapiens/111_GRCh38`.
-   The plugin directory needs pVACtools' `Wildtype.pm` and
+1. `bash bin/prefetch_containers.sh` on a login node pulls every public
+   image. Build the HLA-HD image yourself
+   ([`containers/hlahd/README.md`](../containers/hlahd/README.md)) and
+   copy the `.sif` to `/scratch/jo11/singularity_images/`.
+2. Download the GATK hg38 somatic resources (gnomAD AF-only, 1000G PoN,
+   small_exac_common_3) with their `.tbi` files; see
+   [`DEPENDENCIES.md`](DEPENDENCIES.md).
+3. Use a VEP cache that matches the container, `homo_sapiens/111_GRCh38`,
+   and a plugins directory with pVACtools' `Wildtype.pm` and
    `Frameshift.pm`.
-3. Use Nextflow ≥ 24.04. `conf/gadi.config` uses `resourceLimits`, which
+4. Build the BWA index, `.fai` and `.dict` beside the genome FASTA once,
+   or the first run builds them.
+5. Use Nextflow ≥ 24.04. `conf/gadi.config` uses `resourceLimits`, which
    caps retried steps to one normal-queue node (48 cpus, 190 GB, 48 h)
    instead of letting qsub reject them.
-4. pVACseq reads the tumour and normal VCF columns `tumor` and `normal`.
-   These come from Mutect2's read-group sample names. If you supply your
-   own `dna_vcf`, set `pvacseq_tumor_sample_name` and
-   `pvacseq_normal_sample_name` to match it.
+
+`bin/run_somatic_gadi.sh --check` tests all of these.
 
 Either way, the actual variant calling / alignment / pVACseq work always
 runs as real PBS jobs on compute nodes, submitted automatically: these
@@ -127,11 +129,6 @@ itself lives.
   hand-rolled `checkpoint_run` file-existence checks entirely.
 
 ## Troubleshooting
-
-For the optional ERVcaller DNA branch, build and transfer a custom SIF before
-submission and pass its local path with `--ervcaller_container`. The normal
-container prefetch helper does not provide this image. See
-[ERVcaller on DNA](ERV_DNA.md) for the build recipe and required references.
 
 **A step fails immediately with a network/connection error, and its log
 mentions pulling or fetching an image**: a container wasn't pre-cached, or

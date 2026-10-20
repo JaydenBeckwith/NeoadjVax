@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail CI on missing/duplicate tasks, dropped timepoints or overwritten outputs."""
+"""Fail CI on missing/duplicate tasks, skipped bypasses or missing per-patient outputs."""
 import argparse
 from collections import Counter
 import csv
@@ -20,39 +20,52 @@ def check(manifest, trace, outdir):
         raise ValueError(f"Failed/incomplete tasks: {failed}")
     observed = Counter(row["process"] for row in rows)
     patients = len(manifest["patients"])
-    samples = len(manifest["rna_samples"])
+    fastq = len(manifest["fastq_patients"])
+    typed = len(manifest["hla_typed_patients"])
+    scatter = len(manifest["scatter"])
     expected = {
-        "DNA_VARIANT_CALLING:ADD_READ_GROUPS": patients * 2,
-        "DNA_VARIANT_CALLING:MARK_DUPLICATES": patients * 2,
-        "DNA_VARIANT_CALLING:MUTECT2": patients,
-        "DNA_VARIANT_CALLING:FILTER_MUTECT_CALLS": patients,
-        "DNA_VARIANT_CALLING:FILTER_STANDARD_CHROMS": patients,
-        **{f"RNA_VARIANT_CALLING:{name}": samples for name in (
-            "ADD_READ_GROUPS_RNA", "MARK_DUPLICATES_RNA", "SPLIT_NCIGAR_READS",
-            "BASE_RECALIBRATOR", "APPLY_BQSR", "HAPLOTYPE_CALLER_RNA",
-            "VARIANT_FILTRATION_RNA", "VARIANTS_TO_TABLE")},
-        **{f"PVACSEQ_CORE:{name}": samples for name in ("RNA_SUPPORT_FILTER", "VEP_ANNOTATE", "PVACSEQ_RUN")},
+        "PREPROCESS_DNA:TRIM_GALORE": fastq * 2,
+        "PREPROCESS_DNA:BWA_MEM_ALIGN": fastq * 2,
+        "PREPROCESS_DNA:ADD_READ_GROUPS": (patients - fastq) * 2,
+        "PREPROCESS_DNA:MARK_DUPLICATES": patients * 2,
+        "PREPROCESS_DNA:APPLY_BQSR": patients * 2,
+        "SOMATIC_CALLING:MUTECT2": patients * scatter,
+        "SOMATIC_CALLING:MERGE_MUTECT2_SCATTERS": patients,
+        "SOMATIC_CALLING:GET_PILEUP_SUMMARIES": patients * 2,
+        "SOMATIC_CALLING:CALCULATE_CONTAMINATION": patients,
+        "SOMATIC_CALLING:FILTER_MUTECT_CALLS": patients,
+        "SOMATIC_CALLING:SELECT_PASS_SOMATIC": patients,
+        "HLA_TYPING:EXTRACT_HLA_READS": typed,
+        "HLA_TYPING:HLAHD": typed,
+        "PROXIMAL_VARIANTS:GERMLINE_HAPLOTYPECALLER": patients,
+        "PROXIMAL_VARIANTS:WHATSHAP_PHASE": patients,
+        "PROXIMAL_VARIANTS:VEP_ANNOTATE": patients,
+        "NEOANTIGENS:VEP_ANNOTATE": patients,
+        "NEOANTIGENS:BAM_READCOUNT": patients * 2,
+        "NEOANTIGENS:VCF_READCOUNT_ANNOTATOR": patients,
+        "NEOANTIGENS:PVACSEQ": patients,
+        "NEOANTIGENS:ANNOTATE_CCF": patients,
     }
     for name, count in expected.items():
         if observed[name] != count:
             raise ValueError(f"{name}: expected {count} tasks, got {observed[name]}")
-    forbidden = {"BWA_MEM_ALIGN", "BAM_TO_FASTQ", "STAR_ALIGN", "HLA_TYPING_XHLA"}
-    if any(name.split(":")[-1] in forbidden for name in observed):
-        raise ValueError("Prealigned/manual-HLA bypass was not respected")
     outdir = Path(outdir)
-    for sample in manifest["rna_samples"]:
-        patient, tp = sample["patient_id"], sample["timepoint"]
+    for patient in manifest["patients"]:
         paths = [
-            outdir / patient / "rna_supported_variants" / tp / f"{patient}_{tp}.rna_support_summary.tsv",
-            outdir / patient / "dna_variants" / tp / f"{patient}_{tp}.annotated.vcf.gz",
-            outdir / patient / "pvacseq" / tp / "pvacseq_output" / "stub.log",
+            outdir / patient / "somatic_variants" / f"{patient}.somatic.pass.vcf.gz",
+            outdir / patient / "pvacseq_input" / f"{patient}.somatic.vep.readcounts.vcf.gz.tbi",
+            outdir / patient / "pvacseq_input" / f"{patient}.phased_proximal.vcf.gz.tbi",
+            outdir / patient / "pvacseq_ccf" / f"{patient}.Combined.aggregated.ccf.tsv",
+            outdir / patient / "pvacseq" / "stub.log",
         ]
+        if patient in manifest["hla_typed_patients"]:
+            paths.append(outdir / patient / "hla_typing" / f"{patient}.pvacseq_alleles.txt")
         for path in paths:
             if not path.is_file():
-                raise ValueError(f"Missing per-timepoint output: {path}")
-        if "no biological analysis" not in paths[-1].read_text():
-            raise ValueError(f"Missing explicit stub marker: {paths[-1]}")
-    print(f"PASS: {patients} patients, {samples} RNA timepoints reached pVACseq; wiring only, no biological predictions.")
+                raise ValueError(f"Missing per-patient output: {path}")
+        if "no biological analysis" not in paths[4].read_text():
+            raise ValueError(f"Missing explicit stub marker: {paths[4]}")
+    print(f"PASS: {patients} patients reached pVACseq and CCF annotation; wiring only, no biological predictions.")
 
 
 if __name__ == "__main__":

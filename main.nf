@@ -1,299 +1,146 @@
 #!/usr/bin/env nextflow
 /*
  * ===========================================================================
- * NeoadjVax: neoadjuvant melanoma vaccine neoantigen discovery pipeline
+ * NeoadjVax: somatic neoantigen prediction for neoadjuvant melanoma vaccines
  * ===========================================================================
- * See docs/ARCHITECTURE.md for the full stage-by-stage design and open
- * decisions on the splicing/fusion/ERV branches.
  *
- *   DNA WGS/WES (tumor+normal, baseline) ─┐
- *                                          ├─▶ variant matching ─▶ pVACseq ─▶ core neoantigens (per RNA timepoint)
- *   RNA-seq (per timepoint) ───────────────┘        │
- *                                                    ├─▶ splicing branch  ─▶ splice2neo peptide contexts (--run_splicing_neoantigens)
- *                                                    ├─▶ fusion branch    ─▶ pVACfuse (--run_fusion_neoantigens)
- *                                                    └─▶ ERV branch       ─▶ TBD       (--run_erv_neoantigens)
+ *   tumour + normal DNA (FASTQ or BAM)
+ *     ─> PREPROCESS_DNA     QC, trim, BWA-MEM, MarkDuplicates, BQSR
+ *     ─> SOMATIC_CALLING    Mutect2 + orientation + contamination, FilterMutectCalls, PASS
+ *     ─> HLA_TYPING         HLA-HD on the normal (or samplesheet hla_alleles)
+ *     ─> PROXIMAL_VARIANTS  germline near somatic sites, WhatsHap phasing, VEP
+ *     ─> NEOANTIGENS        VEP, bam-readcount, pVACseq (Sequenza purity), CCF (ploidy/CN)
  *
- * DNA and RNA are joined on patient_id, not row-for-row: see
- * assets/samplesheet_schema.md for why there are two separate samplesheets.
+ * One samplesheet row per patient: see assets/samplesheet_schema.md, and
+ * docs/ARCHITECTURE.md for why each step is there.
  */
 
 nextflow.enable.dsl = 2
 
-// ---------------------------------------------------------------------
-// Pipeline selection (--pipelines): a friendlier alternative to setting
-// each --run_* flag individually. Maps a comma-separated list of names
-// (case/spacing-insensitive: "geneFusion", "gene-fusion", "Gene Fusion"
-// and "gene_fusion" all resolve to the same entry) onto the underlying
-// run_* flags. Some names turn on more than one flag together:
-// "somatic_neoantigen" needs DNA calling + RNA calling + pVACseq core all
-// three, since the core neoantigen score is DNA calls filtered for RNA
-// support (see PVACSEQ_CORE below), not any one of those alone.
-//
-// When --pipelines is set, it's authoritative for every run_* flag:
-// unlisted branches are turned OFF even if their individual --run_*
-// default is true. Leave --pipelines unset to keep the old behaviour
-// (each --run_* flag controls its own branch, independently).
-// ---------------------------------------------------------------------
-def applyPipelineSelection(String pipelinesParam) {
-    // key: normalized name (lowercase, punctuation/spaces stripped) ->
-    // the run_* flags it turns on. Some names turn on more than one flag
-    // together: "somatic_neoantigen" needs DNA calling + RNA calling +
-    // pVACseq core all three, since the core neoantigen score is DNA
-    // calls filtered for RNA support (see PVACSEQ_CORE below), not any
-    // one of those alone.
-    def registry = [
-        'dnavariantcalling'  : ['run_dna_variant_calling'],
-        'rnavariantcalling'  : ['run_rna_variant_calling'],
-        'somaticneoantigen'  : ['run_dna_variant_calling', 'run_rna_variant_calling', 'run_pvacseq_core'],
-        'coreneoantigen'     : ['run_dna_variant_calling', 'run_rna_variant_calling', 'run_pvacseq_core'],
-        'pvacseqcore'        : ['run_dna_variant_calling', 'run_rna_variant_calling', 'run_pvacseq_core'],
-        'splicingneoantigen' : ['run_splicing_neoantigens'],
-        'splicing'           : ['run_splicing_neoantigens'],
-        'genefusion'         : ['run_fusion_neoantigens'],
-        'fusion'             : ['run_fusion_neoantigens'],
-        'fusionneoantigen'   : ['run_fusion_neoantigens'],
-        'ervneoantigen'      : ['run_erv_neoantigens'],
-        'erv'                : ['run_erv_neoantigens'],
-        'ervdna'             : ['run_erv_dna'],
-        'ervcaller'          : ['run_erv_dna'],
-        'purityploidy'       : ['run_purity_ploidy'],
-        'sequenza'           : ['run_purity_ploidy'],
-        'hlaloh'             : ['run_hla_loh'],
-        'loh'                : ['run_hla_loh'],
-    ]
-    def allFlags = [
-        'run_dna_variant_calling', 'run_rna_variant_calling', 'run_pvacseq_core',
-        'run_splicing_neoantigens', 'run_fusion_neoantigens', 'run_erv_neoantigens',
-        'run_purity_ploidy', 'run_hla_loh', 'run_erv_dna',
-    ]
-    def normalize = { String s -> s.toLowerCase().replaceAll(/[^a-z0-9]/, '') }
+include { PREPROCESS_DNA    } from './workflows/preprocess_dna'
+include { SOMATIC_CALLING   } from './workflows/somatic_calling'
+include { HLA_TYPING        } from './workflows/hla_typing'
+include { PROXIMAL_VARIANTS } from './workflows/proximal_variants'
+include { NEOANTIGENS       } from './workflows/neoantigens'
+include { SAMTOOLS_FAIDX; CREATE_SEQUENCE_DICTIONARY; BWA_INDEX } from './modules/local/reference/prepare_genome'
 
-    def requested = pipelinesParam.split(',').collect { it.trim() }.findAll { it }
-    def flagsToEnable = [] as Set
-    def unknown = []
-    requested.each { name ->
-        def key = normalize.call(name)
-        if (registry.containsKey(key)) {
-            flagsToEnable.addAll(registry[key])
-        } else {
-            unknown << name
-        }
-    }
-    if (unknown) {
-        def validNames = registry.keySet().sort().join(', ')
-        error "--pipelines: unrecognized name(s) ${unknown}: valid names (case/spacing/punctuation-insensitive): ${validNames}. Comma-separate to run more than one, e.g. --pipelines somatic_neoantigen,gene_fusion"
-    }
-    allFlags.each { flag -> params[flag] = flagsToEnable.contains(flag) }
-    log.info "--pipelines '${pipelinesParam}' resolved to: ${allFlags.findAll { params[it] }.sort()}"
+// ---------------------------------------------------------------------
+// Launch-time checks: the samplesheet and every reference file are
+// validated before any task is submitted, so a typo fails in seconds
+// rather than after a day of alignment.
+// ---------------------------------------------------------------------
+def isNumber(value) {
+    try { Double.parseDouble(value as String); return true } catch (Exception e) { return false }
 }
 
-// ---------------------------------------------------------------------
-// Samplesheet validation: runs synchronously at launch (splitCsv() on a
-// plain `file()` reads it eagerly, not as a reactive Channel) so a missing
-// or inconsistent row fails immediately with a clear message instead of
-// surfacing as a confusing empty-channel gap deep into execution. Worth
-// having now that each row can supply FASTQ, an already-aligned BAM, or an
-// already-called VCF, in any combination.
-// ---------------------------------------------------------------------
-def validateDnaSamplesheet(path) {
-    file(path).splitCsv(header: true).each { row ->
-        def hasVcf  = row.dna_vcf as boolean
-        def hasHla  = row.hla_alleles as boolean
-        ['tumor', 'normal'].each { sample_type ->
-            def hasBam = row["${sample_type}_bam"] as boolean
-            def hasFq  = (row["${sample_type}_r1"] as boolean) && (row["${sample_type}_r2"] as boolean)
-            if (!hasVcf && !hasBam && !hasFq) {
-                error "dna_samplesheet: patient ${row.patient_id} has no ${sample_type}_bam and no complete ${sample_type}_r1/${sample_type}_r2 pair, and no dna_vcf to fall back on"
+def validateSamplesheet(path) {
+    def rows = file(path, checkIfExists: true).splitCsv(header: true)
+    if (!rows) error "samplesheet ${path} has no rows"
+    def seen = [] as Set
+    rows.each { row ->
+        def id = row.patient_id
+        if (!id) error "samplesheet: a row has no patient_id"
+        if (!(id ==~ /[A-Za-z0-9][A-Za-z0-9._-]*/)) error "samplesheet: patient_id '${id}' must start with a letter or digit and contain only letters, digits, '.', '_' or '-'"
+        if (!seen.add(id)) error "samplesheet: patient_id '${id}' appears more than once"
+
+        ['tumor', 'normal'].each { st ->
+            def hasBam = row["${st}_bam"] as boolean
+            def hasR1 = row["${st}_r1"] as boolean
+            def hasR2 = row["${st}_r2"] as boolean
+            if (hasBam && (hasR1 || hasR2)) error "samplesheet: ${id} gives both ${st}_bam and ${st} FASTQ: supply one or the other"
+            if (!hasBam && !(hasR1 && hasR2)) error "samplesheet: ${id} needs ${st}_r1 + ${st}_r2, or ${st}_bam"
+            [row["${st}_bam"], row["${st}_r1"], row["${st}_r2"]].findAll { it }.each { f ->
+                if (!file(f).exists()) error "samplesheet: ${id} ${st} input not found: ${f}"
             }
         }
-        def hasNormalSource = (row.normal_bam as boolean) || ((row.normal_r1 as boolean) && (row.normal_r2 as boolean))
-        if (hasVcf && params.run_pvacseq_core && !hasHla && !hasNormalSource) {
-            error "dna_samplesheet: patient ${row.patient_id} supplies dna_vcf with no normal sample and no hla_alleles: PVACSEQ_CORE has no normal BAM to type HLA from and no manual override. Add hla_alleles, or a normal_bam/normal_r1+r2 pair."
+
+        if (!row.purity) error "samplesheet: ${id} has no purity (Sequenza cellularity, between 0 and 1)"
+        if (!isNumber(row.purity) || !((row.purity as double) > 0 && (row.purity as double) <= 1)) {
+            error "samplesheet: ${id} purity '${row.purity}' must be a number in (0, 1]"
+        }
+        if (row.ploidy && !(isNumber(row.ploidy) && (row.ploidy as double) > 0)) {
+            error "samplesheet: ${id} ploidy '${row.ploidy}' must be a positive number"
+        }
+        if (row.sequenza_segments && !file(row.sequenza_segments).exists()) {
+            error "samplesheet: ${id} sequenza_segments not found: ${row.sequenza_segments}"
+        }
+        if (row.sex && !(row.sex.toLowerCase() in ['male', 'female'])) {
+            error "samplesheet: ${id} sex '${row.sex}' must be male or female (or left blank)"
+        }
+        if (!row.hla_alleles && !params.hlahd_container) {
+            error "samplesheet: ${id} has no hla_alleles, so HLA-HD must type it, but --hlahd_container is not set: build containers/hlahd (see its README) or give hla_alleles"
         }
     }
+    rows
 }
 
-def validateRnaSamplesheet(path) {
-    file(path).splitCsv(header: true).each { row ->
-        def hasVcf = row.rna_vcf as boolean
-        def hasBam = row.rna_bam as boolean
-        def hasFq  = (row.rna_fastq_r1 as boolean) && (row.rna_fastq_r2 as boolean)
-        if (!hasVcf && !hasBam && !hasFq) {
-            error "rna_samplesheet: patient ${row.patient_id} timepoint ${row.timepoint} has none of rna_vcf, rna_bam, or a complete rna_fastq_r1/rna_fastq_r2 pair"
-        }
-    }
+// A VCF param that must exist with its .tbi beside it; returns [vcf, tbi].
+def indexedVcf(name, path) {
+    def vcf = file(path)
+    def tbi = file("${path}.tbi")
+    if (!vcf.exists()) error "--${name}: not found: ${path}"
+    if (!tbi.exists()) error "--${name}: no index at ${path}.tbi (create one with: gatk IndexFeatureFile -I ${path})"
+    [vcf, tbi]
 }
 
-// Only needed when --run_hla_loh is used WITHOUT --run_dna_variant_calling
-// (standalone mode): see docs/ARCHITECTURE.md / assets/samplesheet_schema.md.
-def validateHlaLohSamplesheet(path) {
-    file(path).splitCsv(header: true).each { row ->
-        if (!(row.patient_id as boolean)) {
-            error "hla_loh_samplesheet: row missing patient_id"
-        }
-        if (!(row.tumor_bam as boolean)) {
-            error "hla_loh_samplesheet: patient ${row.patient_id} has no tumor_bam"
-        }
-        if (!(row.purity as boolean) || !(row.ploidy as boolean)) {
-            error "hla_loh_samplesheet: patient ${row.patient_id} needs both purity and ploidy (SpecHLA's LOH step requires both)"
-        }
-    }
+def requireParam(name) {
+    if (!params[name]) error "--${name} is required (see docs/DEPENDENCIES.md)"
+    params[name]
 }
-
-include { DNA_VARIANT_CALLING }  from './workflows/dna_variant_calling'
-include { RNA_VARIANT_CALLING }  from './workflows/rna_variant_calling'
-include { PVACSEQ_CORE }         from './workflows/pvacseq_core'
-include { SPLICING_NEOANTIGENS; validateSplicingSamplesheets } from './workflows/splicing_neoantigens'
-include { FUSION_NEOANTIGENS; validateFusionInputs } from './workflows/fusion_neoantigens'
-include { ERV_NEOANTIGENS }      from './workflows/erv_neoantigens'
-include { ERV_DNA; validateErvDnaSamplesheet } from './workflows/erv_dna'
-include { PURITY_PLOIDY }        from './workflows/purity_ploidy'
-include { HLA_LOH }              from './workflows/hla_loh'
 
 workflow {
 
-    if (params.pipelines) {
-        applyPipelineSelection(params.pipelines)
+    rows = validateSamplesheet(requireParam('samplesheet'))
+    samples_ch = Channel.fromList(rows)
+
+    // ---- reference files: reuse indexes found beside the FASTA ----
+    def fasta_path = requireParam('genome_fasta')
+    fasta = file(fasta_path, checkIfExists: true)
+    fai = file("${fasta_path}.fai").exists() ? file("${fasta_path}.fai") : SAMTOOLS_FAIDX(fasta).fai
+    def dict_path = fasta_path.replaceAll(/\.(fa|fasta|fna)(\.gz)?$/, '.dict')
+    dict = file(dict_path).exists() ? file(dict_path) : CREATE_SEQUENCE_DICTIONARY(fasta).dict
+    def bwa_suffixes = ['amb', 'ann', 'bwt', 'pac', 'sa']
+    bwa_index = bwa_suffixes.every { file("${fasta_path}.${it}").exists() }
+        ? bwa_suffixes.collect { file("${fasta_path}.${it}") }
+        : BWA_INDEX(fasta).index
+
+    def known = ['known_dbsnp', 'known_mills', 'known_1000g'].collect { indexedVcf(it, requireParam(it)) }
+    germline_resource = indexedVcf('germline_resource', requireParam('germline_resource'))
+    pon_files = params.panel_of_normals ? indexedVcf('panel_of_normals', params.panel_of_normals) : []
+    common_sites = params.contamination_sites ? indexedVcf('contamination_sites', params.contamination_sites) : null
+    target_intervals = params.target_intervals ? file(params.target_intervals, checkIfExists: true) : []
+    vep_cache = file(requireParam('vep_cache'), checkIfExists: true)
+    vep_plugins = file(requireParam('vep_plugins'), checkIfExists: true)
+
+    if (!params.panel_of_normals) log.warn "No --panel_of_normals: Mutect2 will run without a PoN, so recurrent artefacts are not filtered"
+    if (!params.contamination_sites) log.warn "No --contamination_sites: skipping GetPileupSummaries/CalculateContamination"
+
+    // ---- per-patient clinical inputs, kept out of meta so editing a
+    //      purity value does not invalidate the cached alignment ----
+    clinical_ch = samples_ch.map { row ->
+        tuple([id: row.patient_id],
+              row.purity as String,
+              row.ploidy ?: '',
+              row.sex ? row.sex.toLowerCase() : '',
+              row.sequenza_segments ? file(row.sequenza_segments) : [])
     }
 
-    dna_samplesheet_ch = Channel.empty()
-    rna_samplesheet_ch = Channel.empty()
+    PREPROCESS_DNA(samples_ch, fasta, fai, dict, bwa_index, known*.get(0), known*.get(1))
+    bams_ch = PREPROCESS_DNA.out.bam
+    tumor_bam_ch  = bams_ch.filter { it[1] == 'tumor' }.map { meta, st, bam, bai -> tuple(meta, bam, bai) }
+    normal_bam_ch = bams_ch.filter { it[1] == 'normal' }.map { meta, st, bam, bai -> tuple(meta, bam, bai) }
 
-    if (params.run_dna_variant_calling || params.run_pvacseq_core || params.run_erv_dna || params.run_splicing_neoantigens) {
-        if (!params.dna_samplesheet) error "Please provide --dna_samplesheet (see assets/samplesheet_schema.md)"
-        if (params.run_dna_variant_calling || params.run_pvacseq_core) {
-            validateDnaSamplesheet(params.dna_samplesheet)
-        }
-        if (params.run_erv_dna) validateErvDnaSamplesheet(params.dna_samplesheet, params.run_dna_variant_calling)
-        dna_samplesheet_ch = Channel.fromPath(params.dna_samplesheet).splitCsv(header: true)
-    }
+    SOMATIC_CALLING(tumor_bam_ch.join(normal_bam_ch), bams_ch, fasta, fai, dict,
+                    germline_resource, pon_files, common_sites, target_intervals)
 
-    // Every RNA-derived branch consumes the longitudinal samplesheet, even
-    // when it runs independently of RNA variant calling.  In particular,
-    // `--pipelines gene_fusion` and `--pipelines erv` must not silently
-    // receive an empty input channel.
-    if (params.run_rna_variant_calling || params.run_pvacseq_core ||
-        params.run_splicing_neoantigens || params.run_fusion_neoantigens ||
-        params.run_erv_neoantigens) {
-        if (!params.rna_samplesheet) error "Please provide --rna_samplesheet (see assets/samplesheet_schema.md)"
-        if (params.run_rna_variant_calling || params.run_pvacseq_core || params.run_erv_neoantigens) {
-            validateRnaSamplesheet(params.rna_samplesheet)
-        }
-        rna_samplesheet_ch = Channel.fromPath(params.rna_samplesheet).splitCsv(header: true)
-    }
+    HLA_TYPING(samples_ch, normal_bam_ch)
 
-    if (params.run_splicing_neoantigens) {
-        validateSplicingSamplesheets(params.dna_samplesheet, params.rna_samplesheet, params.run_dna_variant_calling, params)
-    }
-    fusion_settings = [:]
-    if (params.run_fusion_neoantigens) {
-        fusion_settings = validateFusionInputs(params.rna_samplesheet, params.dna_samplesheet, params.run_pvacseq_core, params)
-    }
+    PROXIMAL_VARIANTS(SOMATIC_CALLING.out.pass_vcf, tumor_bam_ch, normal_bam_ch,
+                      fasta, fai, dict, vep_cache, vep_plugins)
 
-    dna_variants_ch   = Channel.empty()
-    dna_normal_bam_ch = Channel.empty()
-    dna_tumor_bam_ch  = Channel.empty()
-    rna_variants_ch   = Channel.empty()
-    core_hla_ch       = Channel.empty()
+    NEOANTIGENS(SOMATIC_CALLING.out.pass_vcf, bams_ch, PROXIMAL_VARIANTS.out.phased_vcf,
+                HLA_TYPING.out.alleles, clinical_ch, fasta, fai, vep_cache, vep_plugins)
 
-    if (params.run_dna_variant_calling) {
-        DNA_VARIANT_CALLING(dna_samplesheet_ch)
-        dna_variants_ch   = DNA_VARIANT_CALLING.out.filtered_vcf
-        dna_normal_bam_ch = DNA_VARIANT_CALLING.out.normal_bam
-        dna_tumor_bam_ch  = DNA_VARIANT_CALLING.out.tumor_bam
-    }
-
-    if (params.run_rna_variant_calling) {
-        RNA_VARIANT_CALLING(rna_samplesheet_ch)
-        rna_variants_ch = RNA_VARIANT_CALLING.out.filtered_vcf
-    }
-
-    if (params.run_pvacseq_core) {
-        if (!params.run_dna_variant_calling || !params.run_rna_variant_calling) {
-            error "--run_pvacseq_core needs both --run_dna_variant_calling and --run_rna_variant_calling (the core neoantigen score is baseline DNA calls filtered for per-timepoint RNA support)"
-        }
-        PVACSEQ_CORE(dna_samplesheet_ch, dna_variants_ch, dna_normal_bam_ch, rna_variants_ch)
-        core_hla_ch = PVACSEQ_CORE.out.hla_by_patient
-    }
-
-    if (params.run_splicing_neoantigens) {
-        SPLICING_NEOANTIGENS(dna_samplesheet_ch, rna_samplesheet_ch, dna_variants_ch, params.run_dna_variant_calling)
-    }
-
-    if (params.run_fusion_neoantigens) {
-        FUSION_NEOANTIGENS(rna_samplesheet_ch, core_hla_ch, fusion_settings)
-    }
-
-    if (params.run_erv_neoantigens) {
-        ERV_NEOANTIGENS(rna_samplesheet_ch)
-    }
-
-    if (params.run_erv_dna) {
-        ERV_DNA(dna_samplesheet_ch, dna_tumor_bam_ch, dna_normal_bam_ch, params.run_dna_variant_calling)
-    }
-
-    // ---------------------------------------------------------------
-    // Tumor purity/ploidy (Sequenza): optional, --run_purity_ploidy.
-    // Fully ported from https://github.com/JaydenBeckwith/Sequenza_tools:
-    // WGS/200bp bins only, see workflows/purity_ploidy.nf.
-    // ---------------------------------------------------------------
-    purity_ploidy_ch = Channel.empty()
-    if (params.run_purity_ploidy) {
-        if (!params.run_dna_variant_calling) {
-            error "--run_purity_ploidy needs --run_dna_variant_calling too (it runs on DNA_VARIANT_CALLING's tumor+normal BAM pairs by patient): a from-samplesheet standalone mode isn't built yet, ask if you need that."
-        }
-        PURITY_PLOIDY(dna_tumor_bam_ch, dna_normal_bam_ch)
-        purity_ploidy_ch = PURITY_PLOIDY.out.purity_ploidy
-    }
-
-    // ---------------------------------------------------------------
-    // HLA loss-of-heterozygosity (SpecHLA): optional, --run_hla_loh.
-    // Independently runnable two ways:
-    //   1. --hla_loh_samplesheet (patient_id,tumor_bam,purity,ploidy):
-    //      no DNA/RNA branches needed at all.
-    //   2. Chained off --run_dna_variant_calling's tumor BAM, with
-    //      purity/ploidy from either --purity_ploidy_csv (manual,
-    //      NeoadjLOH PURITY_CSV format: sample,purity,ploidy) or
-    //      --run_purity_ploidy (once that branch is real).
-    // See assets/samplesheet_schema.md.
-    // ---------------------------------------------------------------
-    if (params.run_hla_loh) {
-        def hla_loh_tumor_bam_ch
-        def hla_loh_purity_ploidy_ch
-
-        if (params.hla_loh_samplesheet) {
-            validateHlaLohSamplesheet(params.hla_loh_samplesheet)
-            def hla_loh_rows_ch = Channel.fromPath(params.hla_loh_samplesheet).splitCsv(header: true)
-            hla_loh_tumor_bam_ch = hla_loh_rows_ch.map { row ->
-                def meta = [id: row.patient_id]
-                tuple(meta, file(row.tumor_bam), file("${row.tumor_bam}.bai"))
-            }
-            hla_loh_purity_ploidy_ch = hla_loh_rows_ch.map { row ->
-                tuple([id: row.patient_id], row.purity, row.ploidy)
-            }
-        } else {
-            if (!params.run_dna_variant_calling) {
-                error "--run_hla_loh needs either --hla_loh_samplesheet (standalone) or --run_dna_variant_calling (to supply the tumor BAM)"
-            }
-            hla_loh_tumor_bam_ch = dna_tumor_bam_ch
-            if (params.purity_ploidy_csv) {
-                hla_loh_purity_ploidy_ch = Channel.fromPath(params.purity_ploidy_csv)
-                    .splitCsv(header: true)
-                    .map { row -> tuple([id: row.sample], row.purity, row.ploidy) }
-            } else if (params.run_purity_ploidy) {
-                hla_loh_purity_ploidy_ch = purity_ploidy_ch
-            } else {
-                error "--run_hla_loh needs purity/ploidy from somewhere: pass --purity_ploidy_csv, or also set --run_purity_ploidy true"
-            }
-        }
-
-        HLA_LOH(hla_loh_tumor_bam_ch, hla_loh_purity_ploidy_ch)
-    }
-
-    // Strict syntax (Nextflow 25.10+) does not allow workflow.onComplete as
-    // a bare top-level statement after the entry workflow: it must be
-    // registered from inside a script declaration. See
-    // https://nextflow.io/docs/latest/strict-syntax.html.
     workflow.onComplete = {
         log.info "NeoadjVax finished: status: ${workflow.success ? 'OK' : 'FAILED'}: results: ${params.outdir}"
     }

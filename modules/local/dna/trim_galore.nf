@@ -7,7 +7,7 @@ process TRIM_GALORE {
     tag "${meta.id}:${sample_type}"
     label 'process_medium'
     container params.containers.trimgalore
-    publishDir "${params.outdir}/${meta.id}/trimmed", mode: 'copy', pattern: '*_val_*.fq.gz'
+    publishDir "${params.outdir}/${meta.id}/qc", mode: 'copy', pattern: '*trimming_report.txt'
 
     input:
     tuple val(meta), val(sample_type), path(r1), path(r2)
