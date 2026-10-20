@@ -1,27 +1,34 @@
-# Mutational (somatic DNA + RNA -> pVACseq) track on Gadi.
+# Somatic neoantigen run on Gadi.
 # Copy somewhere outside the repo, fill in the paths, then pass it with
 # `bin/run_somatic_gadi.sh <this file>` or `-params-file <this file>`.
 # Anything not set here keeps its nextflow.config default.
 
-pipelines: somatic_neoantigen
-
-dna_samplesheet: /scratch/jo11/CHANGE_ME/dna_samples.csv
-rna_samplesheet: /scratch/jo11/CHANGE_ME/rna_samples.csv
+samplesheet: /scratch/jo11/CHANGE_ME/samples.csv
 outdir: /scratch/jo11/CHANGE_ME/neoadjvax_results
 
-# Required: VEP cache must match the VEP 111 container (homo_sapiens/111_GRCh38),
-# and the plugin dir must hold pVACtools' Wildtype.pm and Frameshift.pm.
+# GATK hg38 somatic resources (each with .tbi beside it)
+germline_resource: /g/data/jo11/CHANGE_ME/af-only-gnomad.hg38.vcf.gz
+panel_of_normals: /g/data/jo11/CHANGE_ME/1000g_pon.hg38.vcf.gz
+contamination_sites: /g/data/jo11/CHANGE_ME/small_exac_common_3.hg38.vcf.gz
+# WES only: capture targets on GRCh38
+# target_intervals: /g/data/jo11/CHANGE_ME/targets.hg38.bed
+
+# VEP 111 cache (homo_sapiens/111_GRCh38) and a plugins dir with
+# pVACtools' Wildtype.pm and Frameshift.pm
 vep_cache: /g/data/jo11/CHANGE_ME/vep_cache
 vep_plugins: /g/data/jo11/CHANGE_ME/vep_plugins
+
+# Locally built HLA-HD image (containers/hlahd/README.md); not needed if
+# every samplesheet row has hla_alleles
+hlahd_container: /scratch/jo11/singularity_images/CHANGE_ME_hlahd.sif
 
 # Reference defaults already point at /scratch/jo11 (see nextflow.config);
 # uncomment to override.
 # genome_fasta: /scratch/jo11/GRCh38.fa/GRCh38.primary_assembly.genome.fa
-# gtf: /scratch/jo11/GRCh38.fa/gencode.v46.chr_patch_hapl_scaff.annotation.gtf
-# star_index_dir: /scratch/jo11/STAR_index_GRCh38_gencode46
+# known_dbsnp: /scratch/jo11/NeoTrio_RNA/dbsnp_138.hg38.vcf.gz
+# known_mills: /scratch/jo11/NeoTrio_RNA/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
+# known_1000g: /scratch/jo11/NeoTrio_RNA/1000G_phase1.snps.high_confidence.hg38.vcf.gz
 
-# Set true only if RNA BAMs already match this pipeline's STAR settings.
-rna_skip_realignment: false
-
-pvacseq_algorithms: MHCflurry
-min_rna_alt_reads: 1
+# pVACseq (defaults shown)
+# pvacseq_algorithms: MHCflurry MHCflurryEL NetMHCpan NetMHCpanEL NetMHCIIpan NetMHCIIpanEL
+# pvacseq_extra_args: ''

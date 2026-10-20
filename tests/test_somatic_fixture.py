@@ -22,21 +22,28 @@ class SomaticFixture(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
 
-    def test_reproducible_reference_and_longitudinal_samples(self):
+    def test_reproducible_reference_and_input_mix(self):
         first = fixture.generate(self.root / "one", sam_only=True)
         second = fixture.generate(self.root / "two", sam_only=True)
         self.assertEqual((self.root / "one/genome.fa").read_bytes(), (self.root / "two/genome.fa").read_bytes())
-        self.assertEqual(len(first["bams"]), 8)
-        self.assertEqual({(row["patient_id"], row["timepoint"]) for row in first["rna_samples"]},
-                         {("P1", "PRE"), ("P1", "DAY42"), ("P2", "PRE"), ("P2", "DAY42")})
+        self.assertEqual({i["kind"] for i in first["inputs"]}, {"bam", "fastq"})
         self.assertFalse(second["bam_generation_complete"])
 
-    def test_sam_coordinates_pairs_sequences_and_spliced_reads(self):
+    def test_samplesheet_carries_purity_and_hla_bypass(self):
+        fixture.generate(self.root / "data", sam_only=True)
+        with (self.root / "data/samplesheet.csv").open() as handle:
+            rows = {row["patient_id"]: row for row in csv.DictReader(handle)}
+        self.assertEqual(rows["P1"]["purity"], "0.62")
+        self.assertTrue(rows["P1"]["hla_alleles"])
+        self.assertFalse(rows["P2"]["hla_alleles"])
+        self.assertTrue(rows["P2"]["tumor_r1"] and not rows["P2"]["tumor_bam"])
+
+    def test_sam_coordinates_pairs_and_sequences(self):
         manifest = fixture.generate(self.root / "data", sam_only=True)
-        for bam in manifest["bams"]:
-            sam = Path(bam["path"]).with_suffix(".sam").read_text()
+        for item in (i for i in manifest["inputs"] if i["kind"] == "bam"):
+            sam = Path(item["path"]).with_suffix(".sam").read_text()
             self.assertIn("@HD\tVN:1.6\tSO:coordinate", sam)
-            self.assertIn(f"SM:{bam['sample']}", sam)
+            self.assertIn(f"SM:{item['sample']}", sam)
             rows = [line.split("\t") for line in sam.splitlines() if not line.startswith("@")]
             self.assertEqual(len(rows), 48)
             positions = [int(row[3]) for row in rows]
@@ -53,7 +60,6 @@ class SomaticFixture(unittest.TestCase):
                 self.assertEqual(pair[0][3], pair[1][7])
                 self.assertEqual(pair[1][3], pair[0][7])
                 self.assertEqual(int(pair[0][8]), -int(pair[1][8]))
-            self.assertEqual(any("N" in row[5] for row in rows), bam["rna"])
 
     def test_will_not_overwrite_existing_data(self):
         marker = self.root / "important.txt"
@@ -73,8 +79,8 @@ class SomaticFixture(unittest.TestCase):
         path = self.root / "data/manifest.json"
         path.write_text(json.dumps(manifest))
         trace = self.root / "trace.tsv"
-        trace.write_text("process\tstatus\texit\nDNA_VARIANT_CALLING:MUTECT2\tCOMPLETED\t0\n")
-        with self.assertRaisesRegex(ValueError, "expected 4 tasks"):
+        trace.write_text("process\tstatus\texit\nSOMATIC_CALLING:MUTECT2\tCOMPLETED\t0\n")
+        with self.assertRaisesRegex(ValueError, "expected"):
             checker.check(path, trace, self.root)
 
 

@@ -1,5 +1,5 @@
-# Synthetic BAMs are real/validated; analysis tools are stubbed intentionally.
-# This checks main.nf wiring and all patient/timepoint outputs, not accuracy.
+# Synthetic BAMs/FASTQs are real/validated; analysis tools are stubbed intentionally.
+# This checks main.nf wiring and all per-patient outputs, not accuracy.
 name: CI
 
 on:
@@ -32,7 +32,7 @@ jobs:
         run: python bin/check_nf_structure.py .
 
   somatic-wiring:
-    name: Somatic pipeline — synthetic BAM wiring test
+    name: Somatic pipeline — synthetic wiring test
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -60,14 +60,13 @@ jobs:
           curl --fail --silent --show-error --location https://get.nextflow.io -o nextflow
           sudo install -m 755 nextflow /usr/local/bin/nextflow
           nextflow -version
-      - name: Generate and validate synthetic DNA/RNA BAMs
+      - name: Generate and validate synthetic tumour/normal inputs
         run: python tests/dna_somatic/make_fixture.py --outdir tests/dna_somatic/generated
       - name: Run the real entry workflow with stubbed analysis tools
         run: |
           nextflow -c tests/dna_somatic/smoke.config run main.nf \
-            --pipelines somatic_neoantigen -stub-run \
-            -work-dir test-work/dna_somatic
-      - name: Assert every patient and RNA timepoint reaches pVACseq
+            -stub-run -work-dir test-work/dna_somatic
+      - name: Assert every patient reaches pVACseq and CCF annotation
         run: |
           python tests/dna_somatic/check_results.py \
             --manifest tests/dna_somatic/generated/manifest.json \

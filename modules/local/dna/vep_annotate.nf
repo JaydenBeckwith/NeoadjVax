@@ -1,44 +1,46 @@
-// Ported from: DNA pVACseq script -> run_vep()
-// Wildtype + Frameshift plugins are required by pVACseq for correct
-// wild-type/mutant peptide pairing and frameshift neoantigen calling:
-// kept exactly as specified in the original script.
+// VEP annotation with the options pVACseq's input-prep docs list as
+// required (--symbol --terms SO --mane_select --canonical --tsl --biotype
+// --hgvs --fasta --offline --cache) plus pVACtools' Wildtype and
+// Frameshift plugins, which must be in params.vep_plugins. Used twice per
+// patient with the same settings: on the somatic VCF that pVACseq scores,
+// and on the phased somatic+germline VCF it reads proximal variants from;
+// both need matching CSQ transcripts. Output is plain VCF because the
+// readcount steps after it rewrite the file anyway.
 
 process VEP_ANNOTATE {
-    tag "${meta.id}:${meta.timepoint}"
+    tag "${meta.id}:${name}"
     label 'process_medium'
     container params.containers.vep
-    publishDir "${params.outdir}/${meta.id}/dna_variants/${meta.timepoint}", mode: 'copy'
 
     input:
-    tuple val(meta), path(vcf)
+    tuple val(meta), path(vcf), val(name)
     path fasta
+    path fasta_fai
     path vep_cache
     path vep_plugins
 
     output:
-    tuple val(meta), path("${meta.id}_${meta.timepoint}.annotated.vcf.gz"), emit: vcf
+    tuple val(meta), path("${meta.id}.${name}.vep.vcf"), emit: vcf
 
     script:
     """
-    vep -i ${vcf} \\
-        -o ${meta.id}_${meta.timepoint}.annotated.vcf.gz \\
-        --format vcf --vcf --verbose --assembly GRCh38 \\
-        --symbol --canonical --distance 5 \\
-        --plugin Wildtype,${fasta} \\
-        --plugin Frameshift,${fasta} \\
-        --fasta ${fasta} \\
-        --offline --cache \\
+    vep \\
+        --input_file ${vcf} \\
+        --output_file ${meta.id}.${name}.vep.vcf \\
+        --format vcf --vcf \\
+        --assembly ${params.vep_assembly} \\
+        --cache_version ${params.vep_cache_version} \\
+        --offline --cache --dir_cache ${vep_cache} \\
         --dir_plugins ${vep_plugins} \\
-        --dir_cache ${vep_cache} \\
-        --tsl --biotype --hgvs \\
-        --terms SO \\
-        --force_overwrite \\
-        --compress_output bgzip \\
+        --fasta ${fasta} \\
+        --symbol --terms SO --mane_select --canonical --tsl --biotype --hgvs \\
+        --plugin Frameshift --plugin Wildtype \\
+        --force_overwrite --no_stats \\
         --fork ${task.cpus}
     """
 
     stub:
     """
-    touch ${meta.id}_${meta.timepoint}.annotated.vcf.gz
+    touch ${meta.id}.${name}.vep.vcf
     """
 }

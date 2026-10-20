@@ -20,10 +20,38 @@
 # safe to notice because that re-pull attempt is exactly what this script
 # exists to avoid.
 #
-# The four .sif entries already on Jayden's Gadi scratch (star/picard/gatk/
-# samtools in nextflow.config) are plain local file paths, not URIs: they
-# need no pulling and aren't listed here.
+# picard and gatk are plain local .sif paths on /scratch/jo11 and the
+# HLA-HD image is built locally (containers/hlahd), so none of those are
+# listed here.
+#
+# Usage:
+#   bash bin/prefetch_containers.sh                      # pull what is missing
+#   bash bin/prefetch_containers.sh --list-missing DIR   # print uncached images (used by run_somatic_gadi.sh)
 set -euo pipefail
+
+# must match nextflow.config's containers{} block
+IMAGES=(
+    "https://depot.galaxyproject.org/singularity/fastqc:0.12.1--hdfd78af_0"
+    "https://depot.galaxyproject.org/singularity/trim-galore:0.6.10--hdfd78af_0"
+    "https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/d7/d7e24dc1e4d93ca4d3a76a78d4c834a7be3985b0e1e56fddd61662e047863a8a/data"
+    "https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/c2/c2f02ceb8cbe5aa37930dcbc0de6f1d07dfb292178c7e780c44ab2f556bf829f/data"
+    "https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/16/164b5421d87e69f8e9f5add5a937e148e8165f11bfb18159da607f56ecdb1495/data"
+    "https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/d8/d837709891c2d98fc0956f6fd0dba18b0f67d96c4db74ccbae7db98fd00afe42/data"
+    "https://depot.galaxyproject.org/singularity/ensembl-vep:111.0--pl5321h2a3209d_0"
+    "docker://mgibio/bam_readcount_helper-cwl:1.1.1"
+    "docker://griffithlab/vatools:5.1.1"
+    "docker://griffithlab/pvactools:7.1.3"
+)
+
+# Nextflow's SingularityCache.simpleName(): drop the scheme, ':' and '/' -> '-', add .img
+cache_name() { local n="${1#*://}"; n="${n//:/-}"; echo "${n//\//-}.img"; }
+
+if [ "${1:-}" = "--list-missing" ]; then
+    for uri in "${IMAGES[@]}"; do
+        [ -f "${2:?cache dir}/$(cache_name "$uri")" ] || echo "$uri"
+    done
+    exit 0
+fi
 
 PBS_PROJECT="${PBS_PROJECT:-jo11}"
 CACHE_DIR="${SINGULARITY_CACHEDIR:-/scratch/${PBS_PROJECT}/${USER}/nxf_singularity_cache}"
@@ -33,46 +61,15 @@ echo "[INFO] Caching into: $CACHE_DIR"
 echo "[INFO] Run this from the Gadi LOGIN node: compute nodes have no external network."
 echo ""
 
-# uri -> local cache filename, must match nextflow.config's containers{} block
-declare -A IMAGES=(
-    ["docker://ghcr.io/tron-bioinformatics/splice2neo:v0.6.14"]="ghcr.io-tron-bioinformatics-splice2neo-v0.6.14.img"
-    ["docker://python:3.11.11-slim"]="python-3.11.11-slim.img"
-    ["https://depot.galaxyproject.org/singularity/bwa:0.7.17--hed695b0_7"]="depot.galaxyproject.org-singularity-bwa-0.7.17--hed695b0_7.img"
-    ["https://depot.galaxyproject.org/singularity/trim-galore:0.6.10--hdfd78af_0"]="depot.galaxyproject.org-singularity-trim-galore-0.6.10--hdfd78af_0.img"
-    ["https://depot.galaxyproject.org/singularity/fastqc:0.12.1--hdfd78af_0"]="depot.galaxyproject.org-singularity-fastqc-0.12.1--hdfd78af_0.img"
-    ["https://depot.galaxyproject.org/singularity/ensembl-vep:111.0--pl5321h2a3209d_0"]="depot.galaxyproject.org-singularity-ensembl-vep-111.0--pl5321h2a3209d_0.img"
-    ["docker://griffithlab/pvactools:7.1.3"]="griffithlab-pvactools-7.1.3.img"
-    ["https://depot.galaxyproject.org/singularity/star-fusion:1.13.0--hdfd78af_2"]="depot.galaxyproject.org-singularity-star-fusion-1.13.0--hdfd78af_2.img"
-    ["https://depot.galaxyproject.org/singularity/arriba:2.5.1--h87b9561_0"]="depot.galaxyproject.org-singularity-arriba-2.5.1--h87b9561_0.img"
-    # Was py38h24c8ff8_1: confirmed 404 on depot.galaxyproject.org this
-    # pass (see nextflow.config's containers{} comment); fixed to a build
-    # confirmed to actually exist there.
-    ["https://depot.galaxyproject.org/singularity/telescope:1.0.3--py38h8e05983_5"]="depot.galaxyproject.org-singularity-telescope-1.0.3--py38h8e05983_5.img"
-    ["docker://humanlongevity/hla:0.0.0"]="humanlongevity-hla-0.0.0.img"
-)
-
-# `bash bin/prefetch_containers.sh somatic` pulls only what
-# --pipelines somatic_neoantigen needs (star/picard/gatk/samtools are
-# already local .sif files on /scratch/jo11).
-if [ "${1:-all}" = "somatic" ]; then
-    for uri in "${!IMAGES[@]}"; do
-        case "$uri" in
-            *bwa:*|*trim-galore:*|*fastqc:*|*ensembl-vep:*|*pvactools:*|*humanlongevity/hla:*) ;;
-            *) unset "IMAGES[$uri]" ;;
-        esac
-    done
-fi
-
-for uri in "${!IMAGES[@]}"; do
-    fname="${IMAGES[$uri]}"
-    dest="${CACHE_DIR}/${fname}"
+for uri in "${IMAGES[@]}"; do
+    dest="${CACHE_DIR}/$(cache_name "$uri")"
     if [ -f "$dest" ]; then
-        echo "[SKIP] already cached: ${fname}"
+        echo "[SKIP] already cached: $(basename "$dest")"
         continue
     fi
-    echo "[PULL] ${uri} -> ${fname}"
+    echo "[PULL] ${uri}"
     singularity pull "$dest" "$uri"
 done
 
 echo ""
-echo "[DONE] Public containers cached. Custom ERVcaller/splicing-tools/AGFusion images still need explicit local .sif paths."
+echo "[DONE] Public containers cached. HLA-HD still needs a local build: containers/hlahd/README.md"

@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Launch the mutational track (--pipelines somatic_neoantigen) on Gadi with
-# the Nextflow driver inside a detached tmux session. Every pipeline step
+# Launch the somatic neoantigen pipeline on Gadi with the Nextflow driver
+# inside a detached tmux session. Every pipeline step
 # is still its own PBS job (conf/gadi.config); tmux only keeps the
 # lightweight driver alive after you log out. See docs/RUNNING_ON_GADI.md.
 #
@@ -65,24 +65,25 @@ fi
 param() { { grep -E "^\s*$1\s*:" "$PARAMS_FILE" || true; } | head -1 | sed -E "s/^\s*$1\s*:\s*//; s/\s+#.*$//; s/^['\"]//; s/['\"]$//"; }
 
 grep -q "CHANGE_ME" "$PARAMS_FILE" && err "params file still contains CHANGE_ME placeholders"
-for key in dna_samplesheet rna_samplesheet; do
-    val="$(param "$key")"
-    if [ -z "$val" ]; then err "$key not set"; elif [ -f "$val" ]; then ok "$key: $val"; else err "$key missing: $val"; fi
-done
-for key in dna_samplesheet rna_samplesheet; do
-    sheet="$(param "$key")"
-    [ -f "$sheet" ] || continue
+
+sheet="$(param samplesheet)"
+if [ -z "$sheet" ]; then err "samplesheet not set"; elif [ -f "$sheet" ]; then ok "samplesheet: $sheet"; else err "samplesheet missing: $sheet"; fi
+if [ -f "$sheet" ]; then
     n=0
-    # every absolute path in the sheet (BAM/FASTQ/VCF) must exist
+    # every absolute path in the sheet (FASTQ/BAM/segments) must exist
     for f in $(tail -n +2 "$sheet" | tr ',' '\n' | tr -d '\r' | grep '^/' || true); do
         n=$((n + 1))
-        [ -e "$f" ] || err "$key references a missing file: $f"
-        case "$f" in
-            *.bam) [ -e "$f.bai" ] || [ -e "${f%.bam}.bai" ] || warn "no index next to $f" ;;
-        esac
+        [ -e "$f" ] || err "samplesheet references a missing file: $f"
     done
-    ok "$key: checked $n input paths"
-done
+    ok "samplesheet: checked $n input paths"
+    # rows without hla_alleles (last column) need the HLA-HD image
+    if tail -n +2 "$sheet" | tr -d '\r' | grep -q ',$' && [ -z "$(param hlahd_container)" ]; then
+        err "some rows have no hla_alleles but hlahd_container is not set (containers/hlahd/README.md)"
+    fi
+fi
+hlahd="$(param hlahd_container)"
+[ -z "$hlahd" ] || { [ -f "$hlahd" ] && ok "hlahd_container: $hlahd" || err "hlahd_container missing: $hlahd"; }
+
 for key in vep_cache vep_plugins; do
     val="$(param "$key")"
     if [ -z "$val" ]; then err "$key not set"; elif [ -d "$val" ]; then ok "$key: $val"; else err "$key missing: $val"; fi
@@ -95,32 +96,42 @@ if [ -n "$plugins" ] && [ -d "$plugins" ]; then
 fi
 [ -n "$(param outdir)" ] || warn "outdir not set: results go to ./results"
 
+# --- VCF resources: must exist with a .tbi beside them --------------------
+vcf_ok() { if [ ! -f "$2" ]; then err "$1 missing: $2"; elif [ ! -f "$2.tbi" ]; then err "$1 has no index: $2.tbi"; else ok "$1: $2"; fi; }
+val="$(param germline_resource)"; [ -n "$val" ] && vcf_ok germline_resource "$val" || err "germline_resource not set"
+for key in panel_of_normals contamination_sites; do
+    val="$(param "$key")"
+    if [ -n "$val" ]; then vcf_ok "$key" "$val"; else warn "$key not set (recommended; see docs/DEPENDENCIES.md)"; fi
+done
+
 # --- reference files and local .sif images (nextflow.config defaults) -----
 # A default only has to exist if the params file doesn't override it.
 while read -r key default; do
     val="$(param "$key")"; val="${val:-$default}"
-    if [ -e "$val" ]; then ok "$key: $val"; else err "$key missing: $val (override it in the params file)"; fi
+    case "$key" in
+        known_*) vcf_ok "$key" "$val" ;;
+        *) if [ -e "$val" ]; then ok "$key: $val"; else err "$key missing: $val (override it in the params file)"; fi ;;
+    esac
 done <<'DEFAULTS'
 genome_fasta /scratch/jo11/GRCh38.fa/GRCh38.primary_assembly.genome.fa
-gtf /scratch/jo11/GRCh38.fa/gencode.v46.chr_patch_hapl_scaff.annotation.gtf
-star_index_dir /scratch/jo11/STAR_index_GRCh38_gencode46
+known_dbsnp /scratch/jo11/NeoTrio_RNA/dbsnp_138.hg38.vcf.gz
 known_mills /scratch/jo11/NeoTrio_RNA/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
 known_1000g /scratch/jo11/NeoTrio_RNA/1000G_phase1.snps.high_confidence.hg38.vcf.gz
-known_dbsnp /scratch/jo11/NeoTrio_RNA/dbsnp_138.hg38.vcf.gz
 DEFAULTS
-for f in star_2.7.11b--h43eeafb_0.sif picard.sif gatk_4.5.0.0.sif samtools_v1.3.1_cv4.sif; do
+fasta="$(param genome_fasta)"; fasta="${fasta:-/scratch/jo11/GRCh38.fa/GRCh38.primary_assembly.genome.fa}"
+[ -f "$fasta.bwt" ] || warn "no BWA index beside $fasta: the run will build one first (several CPU-hours)"
+for f in picard.sif gatk_4.5.0.0.sif; do
     [ -f "/scratch/jo11/singularity_images/$f" ] || err "missing local image: /scratch/jo11/singularity_images/$f"
 done
 
 cache="${SINGULARITY_CACHEDIR:-/scratch/${PBS_PROJECT}/${USER}/nxf_singularity_cache}"
-for img in depot.galaxyproject.org-singularity-bwa-0.7.17--hed695b0_7.img \
-           depot.galaxyproject.org-singularity-trim-galore-0.6.10--hdfd78af_0.img \
-           depot.galaxyproject.org-singularity-fastqc-0.12.1--hdfd78af_0.img \
-           depot.galaxyproject.org-singularity-ensembl-vep-111.0--pl5321h2a3209d_0.img \
-           griffithlab-pvactools-7.1.3.img \
-           humanlongevity-hla-0.0.0.img; do
-    [ -f "$cache/$img" ] || err "container not cached: $cache/$img (run: bash bin/prefetch_containers.sh somatic)"
-done
+missing="$(bash "$REPO_DIR/bin/prefetch_containers.sh" --list-missing "$cache" || true)"
+if [ -n "$missing" ]; then
+    err "containers not cached in $cache (run: bash bin/prefetch_containers.sh):"
+    echo "$missing" | sed 's/^/         /'
+else
+    ok "all public containers cached"
+fi
 
 case "$(hostname)" in
     gadi-login-*) warn "on a plain login node: NCI kills long-running login-node processes; prefer a persistent session (docs/RUNNING_ON_GADI.md)" ;;
