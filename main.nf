@@ -11,6 +11,7 @@
  *     ─> PROXIMAL_VARIANTS  germline near somatic sites, WhatsHap phasing, VEP
  *     ─> NEOANTIGENS        VEP, bam-readcount (DNA + optional RNA), pVACseq (Sequenza purity), CCF (ploidy/CN)
  *     ─> EXPRESSION         optional: featureCounts TPM, GTEx/TCGA context, presentation-machinery and driver panel
+ *     ─> FUSION             optional: STAR-Fusion on baseline RNA FASTQ, AGFusion, pVACfuse
  *     ─> REPORT             RNA support of variants/neoantigens per timepoint, melanoma patient report (LaTeX/PDF)
  *
  * One samplesheet row per patient: see assets/samplesheet_schema.md, and
@@ -25,6 +26,7 @@ include { HLA_TYPING        } from './workflows/hla_typing'
 include { PROXIMAL_VARIANTS } from './workflows/proximal_variants'
 include { NEOANTIGENS       } from './workflows/neoantigens'
 include { EXPRESSION        } from './workflows/expression'
+include { FUSION            } from './workflows/fusion'
 include { REPORT            } from './workflows/report'
 include { SAMTOOLS_FAIDX; CREATE_SEQUENCE_DICTIONARY; BWA_INDEX } from './modules/local/reference/prepare_genome'
 
@@ -63,6 +65,16 @@ def validateSamplesheet(path) {
         ['rna_baseline_bam', 'rna_week6_bam'].findAll { row[it] }.each { col ->
             if (!file(row[col]).exists()) error "samplesheet: ${id} ${col} not found: ${row[col]}"
             if (!bamIndex(row[col])) error "samplesheet: ${id} ${col} has no index (${row[col]}.bai): run samtools index on it"
+        }
+
+        // Fusion inputs: a baseline tumour RNA FASTQ pair for STAR-Fusion,
+        // or the full predictions table of an existing STAR-Fusion run.
+        def hasFusionR1 = row.rna_baseline_r1 as boolean
+        def hasFusionR2 = row.rna_baseline_r2 as boolean
+        if (hasFusionR1 != hasFusionR2) error "samplesheet: ${id} needs both rna_baseline_r1 and rna_baseline_r2, or neither"
+        if (hasFusionR1 && row.starfusion_tsv) error "samplesheet: ${id} gives both an RNA FASTQ pair and starfusion_tsv: supply one or the other"
+        [row.rna_baseline_r1, row.rna_baseline_r2, row.starfusion_tsv].findAll { it }.each { f ->
+            if (!file(f).exists()) error "samplesheet: ${id} fusion input not found: ${f}"
         }
 
         if (!row.purity) error "samplesheet: ${id} has no purity (Sequenza cellularity, between 0 and 1)"
@@ -139,6 +151,38 @@ workflow {
     rna_gtf = params.rna_gtf ? file(params.rna_gtf, checkIfExists: true) : []
     if (!(params.rna_strandedness in [0, 1, 2])) error "--rna_strandedness must be 0 (unstranded), 1 (forward) or 2 (reverse)"
 
+    // ---- optional fusion branch: the AGFusion DB, its pyensembl cache and
+    //      the CTAT lib are checked here, because compute nodes are offline
+    //      and AGFusion would otherwise try to download a missing cache ----
+    def fusion_rows = params.fusion ? rows.findAll { it.rna_baseline_r1 || it.starfusion_tsv } : []
+    agfusion_db = []
+    ctat_genome_lib = []
+    if (params.fusion) {
+        if (!fusion_rows) log.warn "--fusion: no samplesheet row has rna_baseline_r1/_r2 or starfusion_tsv, so no fusions will be called"
+        agfusion_db = file(requireParam('agfusion_db'), checkIfExists: true)
+        def db_name = agfusion_db.name =~ /^agfusion\.homo_sapiens\.(\d+)\.db$/
+        if (!db_name.matches()) error "--agfusion_db: expected a file named agfusion.homo_sapiens.<Ensembl release>.db, got ${agfusion_db.name}"
+        def release = db_name.group(1)
+        def cache_dir = file("${requireParam('agfusion_pyensembl_cache')}/pyensembl/GRCh38/ensembl${release}")
+        if (!(cache_dir.isDirectory() && cache_dir.listFiles().any { it.name.endsWith('.db') })) {
+            error "--agfusion_pyensembl_cache: no indexed pyensembl ${release} cache under ${cache_dir} (build it on a login node with: PYENSEMBL_CACHE_DIR=${params.agfusion_pyensembl_cache} pyensembl install --release ${release} --species homo_sapiens)"
+        }
+        if (params.agfusion_pythonpath && !file("${params.agfusion_pythonpath}/sitecustomize.py").exists()) {
+            error "--agfusion_pythonpath: no sitecustomize.py in ${params.agfusion_pythonpath} (set it to '' if the AGFusion image needs no shim)"
+        }
+        if (release != params.vep_cache_version.toString()) {
+            log.warn "--agfusion_db is Ensembl ${release} but the VEP cache is ${params.vep_cache_version}: fusion and SNV/indel candidates will use different gene models"
+        }
+        if (fusion_rows.any { it.rna_baseline_r1 }) {
+            ctat_genome_lib = file(requireParam('ctat_genome_lib'), checkIfExists: true)
+            if (!file("${ctat_genome_lib}/ref_genome.fa.star.idx").isDirectory()) {
+                error "--ctat_genome_lib: ${ctat_genome_lib} has no ref_genome.fa.star.idx; point it at the ctat_genome_lib_build_dir inside the plug-n-play bundle"
+            }
+        }
+    } else if (rows.any { it.rna_baseline_r1 || it.starfusion_tsv }) {
+        log.warn "Samplesheet has fusion inputs (rna_baseline_r1/_r2 or starfusion_tsv) but --fusion is false: ignoring them"
+    }
+
     if (!params.panel_of_normals) log.warn "No --panel_of_normals: Mutect2 will run without a PoN, so recurrent artefacts are not filtered"
     if (!params.contamination_sites) log.warn "No --contamination_sites: skipping GetPileupSummaries/CalculateContamination"
 
@@ -187,6 +231,19 @@ workflow {
                    rna_gtf, gtex_db, tcga_db)
         expression_ch = EXPRESSION.out.annotated
         panel_ch = EXPRESSION.out.panel
+    }
+
+    // Fusion neoantigens are opt-in and need RNA reads (or an existing
+    // STAR-Fusion table), so most patients may have none.
+    if (params.fusion) {
+        fusion_samples_ch = Channel.fromList(fusion_rows)
+        FUSION(fusion_samples_ch
+                   .filter { row -> row.rna_baseline_r1 }
+                   .map { row -> tuple([id: row.patient_id], file(row.rna_baseline_r1), file(row.rna_baseline_r2)) },
+               fusion_samples_ch
+                   .filter { row -> row.starfusion_tsv }
+                   .map { row -> tuple([id: row.patient_id], file(row.starfusion_tsv)) },
+               HLA_TYPING.out.alleles, ctat_genome_lib, agfusion_db)
     }
 
     // RNA-support figure for patients with RNA, and a report for every patient
