@@ -20,9 +20,11 @@
 # safe to notice because that re-pull attempt is exactly what this script
 # exists to avoid.
 #
-# picard, gatk and whatshap are plain local .sif paths on /scratch/jo11 and the
-# HLA-HD image is built locally (containers/hlahd), so none of those are
-# listed here.
+# picard, gatk, whatshap, vatools and pvactools are plain local .sif paths on
+# /scratch/jo11/singularity_images and the HLA-HD image is built locally
+# (containers/hlahd), so none of those are listed here. To use a local .sif
+# for another tool too, point its nextflow.config containers{} entry at the
+# path and delete it from IMAGES below.
 #
 # Usage:
 #   bash bin/prefetch_containers.sh                      # pull what is missing
@@ -38,8 +40,6 @@ IMAGES=(
     "https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/16/164b5421d87e69f8e9f5add5a937e148e8165f11bfb18159da607f56ecdb1495/data"
     "https://depot.galaxyproject.org/singularity/ensembl-vep:111.0--pl5321h2a3209d_0"
     "docker://mgibio/bam_readcount_helper-cwl:1.1.1"
-    "docker://griffithlab/vatools:5.1.1"
-    "docker://griffithlab/pvactools:7.1.3"
     "docker://jupyter/scipy-notebook:x86_64-python-3.11.6"
     "docker://texlive/texlive:latest-medium"
 )
