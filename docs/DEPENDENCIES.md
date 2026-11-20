@@ -73,16 +73,41 @@ every patient has them, the container need not exist.
 standalone IEDB MHC class I and II at `/opt/iedb`, which NetMHCpan and
 NetMHCIIpan use (`--pvacseq_iedb_install_dir`). Nothing else to download.
 
-## 6. Containers
+## 6. Expression context (optional)
+
+Needed only for `workflows/expression.nf`; see
+[`EXPRESSION.md`](EXPRESSION.md) for the build commands. Nothing here is
+bundled with the repository.
+
+| Param | What | Where |
+| --- | --- | --- |
+| `--rna_gtf` | GTF matching the RNA BAMs' reference, for featureCounts and gene names | [GENCODE release 46](https://www.gencodegenes.org/human/release_46.html): `gencode.v46.annotation.gtf.gz` (use the release the RNA was aligned against) |
+| `--gtex_db` | GTEx table from `bin/build_expression_db.py` | built from `GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct.gz` on the [GTEx downloads page](https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression) |
+| `--tcga_db` | TCGA table from `bin/build_expression_db.py` | built from a gene-by-sample TPM matrix plus a sample-to-cohort table (e.g. a UCSC Xena / Toil recompute matrix with its phenotype file, or GDC STAR-counts TPM) |
+
+`--gtex_tissue` and `--tcga_cancer_type` must name a `GROUP` present in the
+table you built; a name that is not there stops the run and lists what is.
+`--rna_strandedness` (featureCounts `-s`: 0, 1, 2) has no safe default.
+
+The gene panel needs no extra downloads: its gene list is built in
+(`--gene_panel` replaces it with a `gene<TAB>pathway` table), and it reuses
+the same GTEx/TCGA tables, the `--rna_gtf` for gene coordinates, the
+samplesheet's Sequenza segments and the VEP-annotated somatic VCF the run
+already produces.
+
+## 7. Containers
 
 | `containers.` key | Image | Notes |
 |---|---|---|
 | `fastqc`, `trimgalore`, `vep` | depot.galaxyproject.org Biocontainers | as before |
-| `bwa`, `samtools`, `bcftools`, `whatshap` | Seqera community images (bwa+samtools, samtools 1.24, bcftools 1.23.1, WhatsHap 2.8) | the same images nf-core/modules pins; `bwa` holds samtools too because alignment pipes into `samtools sort` |
-| `picard`, `gatk` | local `.sif` on `/scratch/jo11/singularity_images/` (GATK 4.5.0.0) | no pull needed |
+| `bwa`, `samtools`, `bcftools` | Seqera community images (bwa+samtools, samtools 1.24, bcftools 1.23.1) | the same images nf-core/modules pins; `bwa` holds samtools too because alignment pipes into `samtools sort` |
+| `picard`, `gatk`, `whatshap` | local `.sif` on `/scratch/jo11/singularity_images/` (GATK 4.5.0.0; `whatshap.sif` is the image the PBS phasing script uses) | no pull needed |
 | `bam_readcount` | `docker://mgibio/bam_readcount_helper-cwl:1.1.1` | the image pVACtools' docs point to; helper arguments confirmed from the script inside this tag |
 | `vatools` | `docker://griffithlab/vatools:5.1.1` | `vcf-readcount-annotator` |
-| `pvactools` | `docker://griffithlab/pvactools:7.1.3` | |
+| `pvactools` | `docker://griffithlab/pvactools:7.1.3` | also runs the Python helper scripts in `bin/` |
+| `subread` | `https://depot.galaxyproject.org/singularity/subread:2.0.6--he4a0461_2` | `featureCounts`, for the optional expression step |
+| `plots` | `docker://jupyter/scipy-notebook:x86_64-python-3.11.6` | matplotlib for the RNA-support figure (the pvactools image has none); large, so swap in any Python 3 image with matplotlib if you have one |
+| `texlive` | `docker://texlive/texlive:latest-medium` | `pdflatex` for the report; not a pinned release, so pin it by digest once pulled. Unused with `--report_pdf false` |
 
 `bin/prefetch_containers.sh` pulls every public one into the shared
 Singularity cache from a login node.

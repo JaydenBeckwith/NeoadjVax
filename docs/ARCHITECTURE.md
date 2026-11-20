@@ -79,10 +79,14 @@ change nearby unless it is given a phased VCF of proximal variants
    `--germline_min_qual` are dropped.
 3. The tumour column of the somatic VCF and the germline calls (renamed
    to `tumor` to match the tumour BAM) are combined and sorted.
-4. WhatsHap phases them against the tumour BAM with `--tag HP`.
-   pVACtools' recipe uses GATK 3.6 ReadBackedPhasing, which no current
-   GATK ships; WhatsHap's HP tags are the same field pVACseq reads
-   (`pvactools/lib/proximal_variant.py`) to decide what is in phase.
+4. WhatsHap phases them against the tumour BAM with `--tag HP --indels
+   --ignore-read-groups`, the settings of the Gadi PBS phasing script,
+   using `/scratch/jo11/singularity_images/whatshap.sif`. pVACtools'
+   recipe uses GATK 3.6 ReadBackedPhasing, which no current GATK ships
+   (and hangs on Gadi). pVACseq 7.1.3 reads only the HP tag
+   (`pvactools/lib/proximal_variant.py`); with WhatsHap's default PS tags
+   it would treat every heterozygous neighbour as out of phase and use
+   only homozygous ones.
 5. VEP with the same options as the main VCF, then bgzip and tabix.
 
 pVACseq only applies proximal missense variants; candidates near other
@@ -138,14 +142,91 @@ Published: `<id>/pvacseq/` (the full pVACseq output),
 `<id>/pvacseq_input/<id>.somatic.vep.readcounts.vcf.gz`,
 `<id>/pvacseq_ccf/<id>.{MHC_I,MHC_II,Combined}.aggregated.ccf.tsv`.
 
+## 6. EXPRESSION (`workflows/expression.nf`, optional)
+
+Runs when `--gtex_db` or `--tcga_db` is set; see
+[`EXPRESSION.md`](EXPRESSION.md) for the reference tables and the output
+columns.
+
+1. featureCounts over `--rna_gtf` for every RNA BAM in the samplesheet,
+   then `bin/gene_tpm.py` for TPM from counts and union-exon length
+   (`RPK = counts / kb`, `TPM = RPK / (sum RPK / 1e6)`) plus a
+   within-sample expression quartile. Skipped without `--rna_gtf`.
+   `--rna_strandedness` mirrors featureCounts `-s` and has no safe
+   default.
+2. `bin/annotate_expression.py` adds GTEx normal-tissue columns (matched
+   tissue, median and max across tissues, how many tissues express the
+   gene, and a `not_expressed` / `testis_restricted` / `tissue_restricted`
+   / `broadly_expressed` call), the matched TCGA cohort's TPM, this
+   sample's baseline TPM, and an `Expression Flag`. The patient's own RNA
+   is the evidence for the flag when present, else the TCGA cohort, which
+   is what makes the step useful on a DNA-only patient.
+
+3. `bin/gene_panel_report.py` writes a per-patient status table for 94
+   genes in 11 pathways: class I and II presentation, the non-classical
+   class Ib genes (HLA-E, HLA-F, HLA-G) with MR1 and CD1A-E, the
+   MHC class I-related NKG2D ligands (MICA, MICB, ULBP1-3, RAET1E/G/L),
+   their regulators (CIITA, NLRC5, RFX, NFY), the immunoproteasome, the
+   interferon route (IFNG, IFNGR1/2, JAK1, JAK2, STAT1, IRF1/2) and the canonical melanoma
+   drivers (BRAF, NRAS, KRAS, HRAS, NF1, MAP2K1/2, RAC1, PPP6C, KIT,
+   GNAQ/11, TP53, CDKN2A, CDK4, CCND1, RB1, MDM2, PTEN, PIK3CA, AKT1,
+   ARID2, IDH1, STK19, DDX3X, SF3B1, BAP1, EIF1AX, MITF, TERT, CTNNB1).
+   Each gene gets an expression call against the GTEx/TCGA range, copy
+   number from the Sequenza segments covering it (gene coordinates come
+   from `--rna_gtf`, with minor copy number 0 reported as LOH), and the
+   somatic consequences VEP called in it, with truncating ones marked.
+   Each gene carries an `Adverse Direction`: most are `loss`, but HLA-E
+   and HLA-G are inhibitory ligands (NKG2A, ILT2/ILT4), so for them gain
+   is the finding and `Panel Flag` reports `INHIBITORY_GAIN`. Otherwise
+   the flag is `LOSS_OF_FUNCTION` / `ALTERED` / `OK` / `NA`. This is
+   the step that catches a tumour that cannot present antigen at all
+   (B2M or HLA loss, JAK1/JAK2 truncation), which no per-candidate report
+   would show. Replace the panel with `--gene_panel`. It is not an
+   HLA-LOH caller: copy number here is gene level, not allele specific.
+
+Reference tables are built once per cohort by
+`bin/build_expression_db.py` from public GTEx/TCGA downloads; no reference
+data ships in this repository.
+
+Published: `<id>/expression/<id>.<timepoint>.tpm.tsv`,
+`<id>/pvacseq_expression/<id>.{MHC_I,MHC_II,Combined}.aggregated.ccf.expression.tsv`,
+`<id>/gene_panel/<id>.gene_panel.tsv`.
+
+## 7. REPORT (`workflows/report.nf`, on by default)
+
+See [`REPORT.md`](REPORT.md).
+
+1. `bin/rna_support.py`, for every patient with at least one RNA BAM:
+   each non-synonymous PASS variant is called RNA-supported at a
+   timepoint when at least `--rna_support_min_alt_reads` RNA reads carry
+   the alt allele, and grouped as expressed both / week 6 only / baseline
+   only / DNA only. The same split is shown for clonal variants (CCF at or
+   above `--clonal_ccf`) and for clonal MHC I and II neoantigens (best
+   peptide under the `--neoag_class_*` IC50 or percentile thresholds).
+   Writes a per-variant table, a summary table and the figure.
+2. `bin/patient_report.py`, for every patient: a LaTeX report laid out
+   after the NeoDisc templates but filled from this pipeline: TCGA SKCM
+   genomic subtype and driver status, TMB and UV signature, purity, ploidy
+   and clonality, HLA alleles and gene-level HLA/B2M copy number, the gene
+   panel, the RNA-support figure, GTEx/TCGA context and the top
+   candidates. NeoDisc sections with no equivalent are listed as not
+   assessed.
+3. `pdflatex` (twice) unless `--report_pdf false`.
+
+Published: `<id>/report/<id>.report.{tex,pdf}`,
+`<id>/report/<id>.rna_support.{summary.tsv,variants.tsv,pdf,png}`.
+
 ## Not covered
 
-- No RNA alignment or expression: RNA comes in as aligned BAMs and only
-  read counts are taken. pVACseq gets no gene or transcript expression
-  (GX/TX), so its expression filters and the Allele Expr tier check do
-  not apply.
+- No RNA alignment: RNA comes in as aligned BAMs. Gene-level TPM is
+  computed in step 6 but is not written back into the VCF, so pVACseq
+  itself still gets no gene or transcript expression (GX/TX) and its own
+  expression filters and Allele Expr tier check do not apply; expression
+  arrives as extra columns afterwards instead.
+- No cross-timepoint expression change: week 6 TPM is published but not
+  compared to baseline.
 - No HLA-LOH and no in-pipeline Sequenza; purity, ploidy and segments
   come from existing Sequenza runs.
 - One FASTQ pair per sample.
-- Tests check wiring (stubbed runs, unit tests on the two helper
-  scripts), never biological accuracy. No real-patient run yet.
+- Tests check wiring (stubbed runs, unit tests on the helper scripts),
+  never biological accuracy. No real-patient run yet.

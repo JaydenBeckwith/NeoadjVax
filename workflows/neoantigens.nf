@@ -73,5 +73,7 @@ workflow NEOANTIGENS {
     emit:
     pvacseq = PVACSEQ.out.results
     ccf     = ANNOTATE_CCF.out.tsv
+    vep_vcf = VEP_ANNOTATE.out.vcf
+    readcounts_vcf = BGZIP_INDEX.out.vcf   // [meta, vcf.gz, tbi] tumour/normal DNA + baseline RNA counts
     rna_week6_vcf = RNA_WEEK6_ANNOTATOR.out.vcf
 }

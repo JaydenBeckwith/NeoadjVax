@@ -20,7 +20,7 @@
 # safe to notice because that re-pull attempt is exactly what this script
 # exists to avoid.
 #
-# picard and gatk are plain local .sif paths on /scratch/jo11 and the
+# picard, gatk and whatshap are plain local .sif paths on /scratch/jo11 and the
 # HLA-HD image is built locally (containers/hlahd), so none of those are
 # listed here.
 #
@@ -36,11 +36,12 @@ IMAGES=(
     "https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/d7/d7e24dc1e4d93ca4d3a76a78d4c834a7be3985b0e1e56fddd61662e047863a8a/data"
     "https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/c2/c2f02ceb8cbe5aa37930dcbc0de6f1d07dfb292178c7e780c44ab2f556bf829f/data"
     "https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/16/164b5421d87e69f8e9f5add5a937e148e8165f11bfb18159da607f56ecdb1495/data"
-    "https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/d8/d837709891c2d98fc0956f6fd0dba18b0f67d96c4db74ccbae7db98fd00afe42/data"
     "https://depot.galaxyproject.org/singularity/ensembl-vep:111.0--pl5321h2a3209d_0"
     "docker://mgibio/bam_readcount_helper-cwl:1.1.1"
     "docker://griffithlab/vatools:5.1.1"
     "docker://griffithlab/pvactools:7.1.3"
+    "docker://jupyter/scipy-notebook:x86_64-python-3.11.6"
+    "docker://texlive/texlive:latest-medium"
 )
 
 # Nextflow's SingularityCache.simpleName(): drop the scheme, ':' and '/' -> '-', add .img

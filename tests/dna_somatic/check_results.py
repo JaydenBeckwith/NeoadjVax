@@ -48,6 +48,17 @@ def check(manifest, trace, outdir):
         "NEOANTIGENS:RNA_WEEK6_ANNOTATOR": week6,
         "NEOANTIGENS:PVACSEQ": patients,
         "NEOANTIGENS:ANNOTATE_CCF": patients,
+        # one featureCounts/TPM task per RNA BAM; annotation runs for every
+        # patient, with or without RNA
+        "EXPRESSION:FEATURECOUNTS": sum(len(timepoints) for timepoints in rna.values()),
+        "EXPRESSION:GENE_TPM": sum(len(timepoints) for timepoints in rna.values()),
+        "EXPRESSION:ANNOTATE_EXPRESSION": patients,
+        # the panel is per patient and needs neither RNA nor segments
+        "EXPRESSION:GENE_PANEL": patients,
+        # RNA support only where there is RNA; a report (and PDF) for everyone
+        "REPORT:RNA_SUPPORT": sum(1 for timepoints in rna.values() if timepoints),
+        "REPORT:PATIENT_REPORT": patients,
+        "REPORT:REPORT_PDF": patients,
     }
     for name, count in expected.items():
         if observed[name] != count:
@@ -60,7 +71,16 @@ def check(manifest, trace, outdir):
             outdir / patient / "pvacseq_input" / f"{patient}.phased_proximal.vcf.gz.tbi",
             outdir / patient / "pvacseq_ccf" / f"{patient}.Combined.aggregated.ccf.tsv",
             outdir / patient / "pvacseq" / "stub.log",
+            outdir / patient / "pvacseq_expression" / f"{patient}.Combined.aggregated.ccf.expression.tsv",
+            outdir / patient / "gene_panel" / f"{patient}.gene_panel.tsv",
+            outdir / patient / "report" / f"{patient}.report.tex",
+            outdir / patient / "report" / f"{patient}.report.pdf",
         ]
+        if rna.get(patient):
+            paths.append(outdir / patient / "report" / f"{patient}.rna_support.summary.tsv")
+            paths.append(outdir / patient / "report" / f"{patient}.rna_support.pdf")
+        for timepoint in rna.get(patient, []):
+            paths.append(outdir / patient / "expression" / f"{patient}.{timepoint}.tpm.tsv")
         if patient in manifest["hla_typed_patients"]:
             paths.append(outdir / patient / "hla_typing" / f"{patient}.pvacseq_alleles.txt")
         for path in paths:
@@ -72,7 +92,11 @@ def check(manifest, trace, outdir):
         has_week6 = "RNA VAF (week 6)" in paths[3].read_text()
         if has_week6 != ("rna_week6" in rna.get(patient, [])):
             raise ValueError(f"{paths[3]}: week 6 RNA columns {'present' if has_week6 else 'missing'} for {patient}")
-    print(f"PASS: {patients} patients reached pVACseq and CCF annotation; wiring only, no biological predictions.")
+        has_support = (outdir / patient / "report" / f"{patient}.rna_support.summary.tsv").exists()
+        if has_support != bool(rna.get(patient)):
+            raise ValueError(f"{patient}: RNA-support output {'present without' if has_support else 'missing despite'} RNA")
+    print(f"PASS: {patients} patients reached pVACseq, CCF, expression annotation, the gene panel and the report; "
+          "wiring only, no biological predictions.")
 
 
 if __name__ == "__main__":
