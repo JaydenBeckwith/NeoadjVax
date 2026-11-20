@@ -79,10 +79,14 @@ change nearby unless it is given a phased VCF of proximal variants
    `--germline_min_qual` are dropped.
 3. The tumour column of the somatic VCF and the germline calls (renamed
    to `tumor` to match the tumour BAM) are combined and sorted.
-4. WhatsHap phases them against the tumour BAM with `--tag HP`.
-   pVACtools' recipe uses GATK 3.6 ReadBackedPhasing, which no current
-   GATK ships; WhatsHap's HP tags are the same field pVACseq reads
-   (`pvactools/lib/proximal_variant.py`) to decide what is in phase.
+4. WhatsHap phases them against the tumour BAM with `--tag HP --indels
+   --ignore-read-groups`, the settings of the Gadi PBS phasing script,
+   using `/scratch/jo11/singularity_images/whatshap.sif`. pVACtools'
+   recipe uses GATK 3.6 ReadBackedPhasing, which no current GATK ships
+   (and hangs on Gadi). pVACseq 7.1.3 reads only the HP tag
+   (`pvactools/lib/proximal_variant.py`); with WhatsHap's default PS tags
+   it would treat every heterozygous neighbour as out of phase and use
+   only homozygous ones.
 5. VEP with the same options as the main VCF, then bgzip and tabix.
 
 pVACseq only applies proximal missense variants; candidates near other

@@ -120,7 +120,7 @@ known_1000g /scratch/jo11/NeoTrio_RNA/1000G_phase1.snps.high_confidence.hg38.vcf
 DEFAULTS
 fasta="$(param genome_fasta)"; fasta="${fasta:-/scratch/jo11/GRCh38.fa/GRCh38.primary_assembly.genome.fa}"
 [ -f "$fasta.bwt" ] || warn "no BWA index beside $fasta: the run will build one first (several CPU-hours)"
-for f in picard.sif gatk_4.5.0.0.sif; do
+for f in picard.sif gatk_4.5.0.0.sif whatshap.sif; do
     [ -f "/scratch/jo11/singularity_images/$f" ] || err "missing local image: /scratch/jo11/singularity_images/$f"
 done
 

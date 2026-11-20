@@ -4,10 +4,11 @@
 // neighbour gives a wrong mutant (and wild-type) sequence.
 //
 // pVACtools' own recipe phases with GATK 3.6 ReadBackedPhasing, which no
-// current GATK ships. WhatsHap with --tag HP writes the same HP-style
-// haplotype tags ReadBackedPhasing did, which is the field pVACseq reads
-// (pvactools/lib/proximal_variant.py) to decide whether a neighbour is in
-// phase with the somatic variant.
+// current GATK ships (and hangs on Gadi compute nodes). WhatsHap with
+// --tag HP writes the same HP-style haplotype tags ReadBackedPhasing did.
+// pVACseq 7.1.3 reads only HP (pvactools/lib/proximal_variant.py): with
+// WhatsHap's default PS tags it would ignore the phasing and keep only
+// homozygous neighbours.
 
 // Germline calls in the matched normal, only inside the windows around
 // somatic sites. A patient with no PASS somatic calls gets an empty
@@ -63,8 +64,14 @@ process WHATSHAP_PHASE {
 
     script:
     """
+    # Same settings as the Gadi PBS phasing script: indels phased too (the
+    # default from WhatsHap 2.0, needed explicitly before it), and every
+    # read used whatever its read group, since the VCF has one sample.
+    whatshap --version
     whatshap phase \\
         --tag HP \\
+        --indels \\
+        --ignore-read-groups \\
         --reference ${fasta} \\
         -o ${meta.id}.phased.vcf \\
         ${vcf} ${tumor_bam}

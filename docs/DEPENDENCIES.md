@@ -78,8 +78,8 @@ NetMHCIIpan use (`--pvacseq_iedb_install_dir`). Nothing else to download.
 | `containers.` key | Image | Notes |
 |---|---|---|
 | `fastqc`, `trimgalore`, `vep` | depot.galaxyproject.org Biocontainers | as before |
-| `bwa`, `samtools`, `bcftools`, `whatshap` | Seqera community images (bwa+samtools, samtools 1.24, bcftools 1.23.1, WhatsHap 2.8) | the same images nf-core/modules pins; `bwa` holds samtools too because alignment pipes into `samtools sort` |
-| `picard`, `gatk` | local `.sif` on `/scratch/jo11/singularity_images/` (GATK 4.5.0.0) | no pull needed |
+| `bwa`, `samtools`, `bcftools` | Seqera community images (bwa+samtools, samtools 1.24, bcftools 1.23.1) | the same images nf-core/modules pins; `bwa` holds samtools too because alignment pipes into `samtools sort` |
+| `picard`, `gatk`, `whatshap` | local `.sif` on `/scratch/jo11/singularity_images/` (GATK 4.5.0.0; `whatshap.sif` is the image the PBS phasing script uses) | no pull needed |
 | `bam_readcount` | `docker://mgibio/bam_readcount_helper-cwl:1.1.1` | the image pVACtools' docs point to; helper arguments confirmed from the script inside this tag |
 | `vatools` | `docker://griffithlab/vatools:5.1.1` | `vcf-readcount-annotator` |
 | `pvactools` | `docker://griffithlab/pvactools:7.1.3` | |
