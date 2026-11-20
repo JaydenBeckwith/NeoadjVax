@@ -235,6 +235,8 @@ workflow {
 
     // Fusion neoantigens are opt-in and need RNA reads (or an existing
     // STAR-Fusion table), so most patients may have none.
+    pvacfuse_ch = Channel.empty()
+    fusion_calls_ch = Channel.empty()
     if (params.fusion) {
         fusion_samples_ch = Channel.fromList(fusion_rows)
         FUSION(fusion_samples_ch
@@ -244,13 +246,15 @@ workflow {
                    .filter { row -> row.starfusion_tsv }
                    .map { row -> tuple([id: row.patient_id], file(row.starfusion_tsv)) },
                HLA_TYPING.out.alleles, ctat_genome_lib, agfusion_db)
+        pvacfuse_ch = FUSION.out.pvacfuse
+        fusion_calls_ch = FUSION.out.predictions
     }
 
     // RNA-support figure for patients with RNA, and a report for every patient
     if (params.report) {
         REPORT(NEOANTIGENS.out.readcounts_vcf, NEOANTIGENS.out.rna_week6_vcf, rna_ch,
                NEOANTIGENS.out.ccf, expression_ch, panel_ch, HLA_TYPING.out.alleles, clinical_ch,
-               fasta, fai, target_intervals)
+               pvacfuse_ch, fusion_calls_ch, fasta, fai, target_intervals)
     }
 
     workflow.onComplete = {

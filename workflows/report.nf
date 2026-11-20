@@ -8,9 +8,10 @@
  *     ─> PATIENT_REPORT  melanoma report (LaTeX)
  *     ─> REPORT_PDF      pdflatex (unless --report_pdf false)
  *
- * The EXPRESSION outputs are optional: when that step did not run, the
- * report falls back to the CCF reports and marks the panel and GTEx/TCGA
- * sections as not available.
+ * The EXPRESSION and FUSION outputs are optional: when a step did not run,
+ * the report falls back to what it has and marks that section as not
+ * available. A patient the fusion branch skipped (no RNA reads, no
+ * STAR-Fusion table) is in the same position as a run with --fusion false.
  */
 
 include { RNA_SUPPORT; PATIENT_REPORT; REPORT_PDF } from '../modules/local/report/report'
@@ -26,6 +27,8 @@ workflow REPORT {
     panel_ch            // [meta, gene_panel.tsv] or empty
     hla_ch              // [meta, allele string]
     clinical_ch         // [meta, purity, ploidy, sex, segments]
+    pvacfuse_ch         // [meta, pvacfuse/] or empty
+    fusion_calls_ch     // [meta, star-fusion predictions.tsv] or empty
     fasta
     fasta_fai
     target_intervals    // capture BED/interval_list, or []
@@ -61,9 +64,15 @@ workflow REPORT {
         .join(RNA_SUPPORT.out.summary.map { meta, summary, figure -> tuple(meta, [summary, figure]) }, remainder: true)
         .filter { it[1] != null }
         .join(timepoints_ch)
-        .map { meta, vcf, hla, purity, ploidy, sex, segments, reports, panel, support, tps ->
+        // same single-value trick for the two optional fusion inputs
+        .join(pvacfuse_ch.map { meta, dir -> tuple(meta, [dir]) }, remainder: true)
+        .filter { it[1] != null }
+        .join(fusion_calls_ch.map { meta, calls -> tuple(meta, [calls]) }, remainder: true)
+        .filter { it[1] != null }
+        .map { meta, vcf, hla, purity, ploidy, sex, segments, reports, panel, support, tps, fusion, calls ->
             tuple(meta, vcf, hla, purity, ploidy, sex, segments, reports, panel ?: [],
-                  support ? support[0] : [], support ? support[1] : [], tps) }
+                  support ? support[0] : [], support ? support[1] : [], tps,
+                  fusion ? fusion[0] : [], calls ? calls[0] : []) }
     PATIENT_REPORT(report_in_ch, fasta, fasta_fai, target_intervals)
 
     pdf_ch = Channel.empty()
