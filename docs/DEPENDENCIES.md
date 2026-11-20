@@ -106,6 +106,8 @@ already produces.
 | `vatools` | `docker://griffithlab/vatools:5.1.1` | `vcf-readcount-annotator` |
 | `pvactools` | `docker://griffithlab/pvactools:7.1.3` | also runs the Python helper scripts in `bin/` |
 | `subread` | `https://depot.galaxyproject.org/singularity/subread:2.0.6--he4a0461_2` | `featureCounts`, for the optional expression step |
+| `plots` | `docker://jupyter/scipy-notebook:x86_64-python-3.11.6` | matplotlib for the RNA-support figure (the pvactools image has none); large, so swap in any Python 3 image with matplotlib if you have one |
+| `texlive` | `docker://texlive/texlive:latest-medium` | `pdflatex` for the report; not a pinned release, so pin it by digest once pulled. Unused with `--report_pdf false` |
 
 `bin/prefetch_containers.sh` pulls every public one into the shared
 Singularity cache from a login node.

@@ -11,6 +11,7 @@
  *     ─> PROXIMAL_VARIANTS  germline near somatic sites, WhatsHap phasing, VEP
  *     ─> NEOANTIGENS        VEP, bam-readcount (DNA + optional RNA), pVACseq (Sequenza purity), CCF (ploidy/CN)
  *     ─> EXPRESSION         optional: featureCounts TPM, GTEx/TCGA context, presentation-machinery and driver panel
+ *     ─> REPORT             RNA support of variants/neoantigens per timepoint, melanoma patient report (LaTeX/PDF)
  *
  * One samplesheet row per patient: see assets/samplesheet_schema.md, and
  * docs/ARCHITECTURE.md for why each step is there.
@@ -24,6 +25,7 @@ include { HLA_TYPING        } from './workflows/hla_typing'
 include { PROXIMAL_VARIANTS } from './workflows/proximal_variants'
 include { NEOANTIGENS       } from './workflows/neoantigens'
 include { EXPRESSION        } from './workflows/expression'
+include { REPORT            } from './workflows/report'
 include { SAMTOOLS_FAIDX; CREATE_SEQUENCE_DICTIONARY; BWA_INDEX } from './modules/local/reference/prepare_genome'
 
 // ---------------------------------------------------------------------
@@ -177,10 +179,21 @@ workflow {
 
     // Expression context is opt-in: without a reference table there is
     // nothing to compare against, so the CCF reports are the final output.
+    expression_ch = Channel.empty()
+    panel_ch = Channel.empty()
     if (gtex_db || tcga_db) {
         if (!rna_gtf) log.warn "No --rna_gtf: skipping RNA quantification, so expression context comes from the reference tables only"
         EXPRESSION(rna_ch, NEOANTIGENS.out.ccf, NEOANTIGENS.out.vep_vcf, clinical_ch,
                    rna_gtf, gtex_db, tcga_db)
+        expression_ch = EXPRESSION.out.annotated
+        panel_ch = EXPRESSION.out.panel
+    }
+
+    // RNA-support figure for patients with RNA, and a report for every patient
+    if (params.report) {
+        REPORT(NEOANTIGENS.out.readcounts_vcf, NEOANTIGENS.out.rna_week6_vcf, rna_ch,
+               NEOANTIGENS.out.ccf, expression_ch, panel_ch, HLA_TYPING.out.alleles, clinical_ch,
+               fasta, fai, target_intervals)
     }
 
     workflow.onComplete = {

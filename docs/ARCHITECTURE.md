@@ -192,6 +192,30 @@ Published: `<id>/expression/<id>.<timepoint>.tpm.tsv`,
 `<id>/pvacseq_expression/<id>.{MHC_I,MHC_II,Combined}.aggregated.ccf.expression.tsv`,
 `<id>/gene_panel/<id>.gene_panel.tsv`.
 
+## 7. REPORT (`workflows/report.nf`, on by default)
+
+See [`REPORT.md`](REPORT.md).
+
+1. `bin/rna_support.py`, for every patient with at least one RNA BAM:
+   each non-synonymous PASS variant is called RNA-supported at a
+   timepoint when at least `--rna_support_min_alt_reads` RNA reads carry
+   the alt allele, and grouped as expressed both / week 6 only / baseline
+   only / DNA only. The same split is shown for clonal variants (CCF at or
+   above `--clonal_ccf`) and for clonal MHC I and II neoantigens (best
+   peptide under the `--neoag_class_*` IC50 or percentile thresholds).
+   Writes a per-variant table, a summary table and the figure.
+2. `bin/patient_report.py`, for every patient: a LaTeX report laid out
+   after the NeoDisc templates but filled from this pipeline: TCGA SKCM
+   genomic subtype and driver status, TMB and UV signature, purity, ploidy
+   and clonality, HLA alleles and gene-level HLA/B2M copy number, the gene
+   panel, the RNA-support figure, GTEx/TCGA context and the top
+   candidates. NeoDisc sections with no equivalent are listed as not
+   assessed.
+3. `pdflatex` (twice) unless `--report_pdf false`.
+
+Published: `<id>/report/<id>.report.{tex,pdf}`,
+`<id>/report/<id>.rna_support.{summary.tsv,variants.tsv,pdf,png}`.
+
 ## Not covered
 
 - No RNA alignment: RNA comes in as aligned BAMs. Gene-level TPM is

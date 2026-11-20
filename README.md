@@ -21,6 +21,8 @@ tumour + normal DNA (FASTQ, or aligned BAM)
                         → pVACseq (--tumor-purity from Sequenza, baseline RNA counts,
                           --phased-proximal-variants-vcf) → week 6 RNA columns
                         → CCF from ploidy/segments
+  (EXPRESSION           optional GTEx/TCGA context and gene panel)
+  └─ REPORT             RNA support per timepoint (figure) → melanoma report (LaTeX → PDF)
 ```
 
 Sequenza is not run here: purity (and optionally ploidy and the segments
@@ -56,6 +58,7 @@ nextflow run main.nf -profile gadi \
 - [`assets/samplesheet_schema.md`](assets/samplesheet_schema.md): the samplesheet, including purity, ploidy and segments.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): each step, why it is there, and the outputs.
 - [`docs/EXPRESSION.md`](docs/EXPRESSION.md): the optional GTEx/TCGA expression step and the presentation-machinery/driver panel, and building the reference tables.
+- [`docs/REPORT.md`](docs/REPORT.md): the per-patient RNA-support figure and melanoma report.
 - [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md): every reference file and container, and where to get it.
 - [`docs/RUNNING_ON_GADI.md`](docs/RUNNING_ON_GADI.md): launching and monitoring on Gadi.
 - [`containers/hlahd/README.md`](containers/hlahd/README.md): building the HLA-HD image from your licensed download.

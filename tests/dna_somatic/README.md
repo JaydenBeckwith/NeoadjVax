@@ -8,7 +8,7 @@ A one-gene GTF and single-row GTEx/TCGA tables are written too, so the optional 
 
 The real `main.nf` runs with `-stub-run`: every process's stub replaces the analysis command. The genome indexes are absent so the reference-building steps run too. The GATK resource VCFs, VEP directories and HLA-HD image name are placeholders and would not work outside a stub run.
 
-`check_results.py` checks the task count for every stage (including that P1 skips alignment and HLA-HD while P2 does not), then that each patient has its PASS VCF, readcount-annotated pVACseq input, phased proximal VCF, pVACseq output, CCF table, expression-annotated report and gene-panel table, that P1's RNA timepoints each produced a TPM table, and that only P1's CCF table carries the week 6 RNA columns. A zero exit code alone is not enough.
+`check_results.py` checks the task count for every stage (including that P1 skips alignment and HLA-HD while P2 does not), then that each patient has its PASS VCF, readcount-annotated pVACseq input, phased proximal VCF, pVACseq output, CCF table, expression-annotated report, gene-panel table and patient report (.tex and .pdf), that P1's RNA timepoints each produced a TPM table and that only P1 (the patient with RNA) has the RNA-support table and figure, and that only P1's CCF table carries the week 6 RNA columns. A zero exit code alone is not enough.
 
 On Linux, with Python 3, samtools, Java 21 and Nextflow 26.04.6:
 

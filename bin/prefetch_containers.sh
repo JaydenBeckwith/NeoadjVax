@@ -40,6 +40,8 @@ IMAGES=(
     "docker://mgibio/bam_readcount_helper-cwl:1.1.1"
     "docker://griffithlab/vatools:5.1.1"
     "docker://griffithlab/pvactools:7.1.3"
+    "docker://jupyter/scipy-notebook:x86_64-python-3.11.6"
+    "docker://texlive/texlive:latest-medium"
 )
 
 # Nextflow's SingularityCache.simpleName(): drop the scheme, ':' and '/' -> '-', add .img
