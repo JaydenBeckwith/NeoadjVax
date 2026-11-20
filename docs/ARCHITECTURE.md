@@ -142,14 +142,45 @@ Published: `<id>/pvacseq/` (the full pVACseq output),
 `<id>/pvacseq_input/<id>.somatic.vep.readcounts.vcf.gz`,
 `<id>/pvacseq_ccf/<id>.{MHC_I,MHC_II,Combined}.aggregated.ccf.tsv`.
 
+## 6. EXPRESSION (`workflows/expression.nf`, optional)
+
+Runs when `--gtex_db` or `--tcga_db` is set; see
+[`EXPRESSION.md`](EXPRESSION.md) for the reference tables and the output
+columns.
+
+1. featureCounts over `--rna_gtf` for every RNA BAM in the samplesheet,
+   then `bin/gene_tpm.py` for TPM from counts and union-exon length
+   (`RPK = counts / kb`, `TPM = RPK / (sum RPK / 1e6)`) plus a
+   within-sample expression quartile. Skipped without `--rna_gtf`.
+   `--rna_strandedness` mirrors featureCounts `-s` and has no safe
+   default.
+2. `bin/annotate_expression.py` adds GTEx normal-tissue columns (matched
+   tissue, median and max across tissues, how many tissues express the
+   gene, and a `not_expressed` / `testis_restricted` / `tissue_restricted`
+   / `broadly_expressed` call), the matched TCGA cohort's TPM, this
+   sample's baseline TPM, and an `Expression Flag`. The patient's own RNA
+   is the evidence for the flag when present, else the TCGA cohort, which
+   is what makes the step useful on a DNA-only patient.
+
+Reference tables are built once per cohort by
+`bin/build_expression_db.py` from public GTEx/TCGA downloads; no reference
+data ships in this repository.
+
+Published: `<id>/expression/<id>.<timepoint>.tpm.tsv`,
+`<id>/pvacseq_expression/<id>.{MHC_I,MHC_II,Combined}.aggregated.ccf.expression.tsv`.
+
 ## Not covered
 
-- No RNA alignment or expression: RNA comes in as aligned BAMs and only
-  read counts are taken. pVACseq gets no gene or transcript expression
-  (GX/TX), so its expression filters and the Allele Expr tier check do
-  not apply.
+- No RNA alignment: RNA comes in as aligned BAMs. Gene-level TPM is
+  computed in step 6 but is not written back into the VCF, so pVACseq
+  itself still gets no gene or transcript expression (GX/TX) and its own
+  expression filters and Allele Expr tier check do not apply; expression
+  arrives as extra columns afterwards instead.
+- No antigen-presentation-machinery panel (HLA, B2M, TAP1/2,
+  immunoproteasome up/down against GTEx/TCGA) and no cross-timepoint
+  expression change.
 - No HLA-LOH and no in-pipeline Sequenza; purity, ploidy and segments
   come from existing Sequenza runs.
 - One FASTQ pair per sample.
-- Tests check wiring (stubbed runs, unit tests on the two helper
-  scripts), never biological accuracy. No real-patient run yet.
+- Tests check wiring (stubbed runs, unit tests on the helper scripts),
+  never biological accuracy. No real-patient run yet.

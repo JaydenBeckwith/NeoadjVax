@@ -48,6 +48,11 @@ def check(manifest, trace, outdir):
         "NEOANTIGENS:RNA_WEEK6_ANNOTATOR": week6,
         "NEOANTIGENS:PVACSEQ": patients,
         "NEOANTIGENS:ANNOTATE_CCF": patients,
+        # one featureCounts/TPM task per RNA BAM; annotation runs for every
+        # patient, with or without RNA
+        "EXPRESSION:FEATURECOUNTS": sum(len(timepoints) for timepoints in rna.values()),
+        "EXPRESSION:GENE_TPM": sum(len(timepoints) for timepoints in rna.values()),
+        "EXPRESSION:ANNOTATE_EXPRESSION": patients,
     }
     for name, count in expected.items():
         if observed[name] != count:
@@ -60,7 +65,10 @@ def check(manifest, trace, outdir):
             outdir / patient / "pvacseq_input" / f"{patient}.phased_proximal.vcf.gz.tbi",
             outdir / patient / "pvacseq_ccf" / f"{patient}.Combined.aggregated.ccf.tsv",
             outdir / patient / "pvacseq" / "stub.log",
+            outdir / patient / "pvacseq_expression" / f"{patient}.Combined.aggregated.ccf.expression.tsv",
         ]
+        for timepoint in rna.get(patient, []):
+            paths.append(outdir / patient / "expression" / f"{patient}.{timepoint}.tpm.tsv")
         if patient in manifest["hla_typed_patients"]:
             paths.append(outdir / patient / "hla_typing" / f"{patient}.pvacseq_alleles.txt")
         for path in paths:
@@ -72,7 +80,8 @@ def check(manifest, trace, outdir):
         has_week6 = "RNA VAF (week 6)" in paths[3].read_text()
         if has_week6 != ("rna_week6" in rna.get(patient, [])):
             raise ValueError(f"{paths[3]}: week 6 RNA columns {'present' if has_week6 else 'missing'} for {patient}")
-    print(f"PASS: {patients} patients reached pVACseq and CCF annotation; wiring only, no biological predictions.")
+    print(f"PASS: {patients} patients reached pVACseq, CCF and expression annotation; "
+          "wiring only, no biological predictions.")
 
 
 if __name__ == "__main__":

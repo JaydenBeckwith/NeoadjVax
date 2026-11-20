@@ -4,8 +4,10 @@
 P1 enters as already-aligned BAMs with HLA alleles in the samplesheet, a
 Sequenza segments file, and baseline and week 6 RNA BAMs (copies of its
 tumour BAM; the week 6 index is named <x>.bai rather than <x>.bam.bai); P2 enters as FASTQ pairs with no HLA alleles, so it
-goes through alignment and HLA-HD. Reference/resource files are empty
-placeholders: only valid with nextflow -stub-run.
+goes through alignment and HLA-HD. A tiny GTF and GTEx/TCGA expression
+tables are written too, so the optional expression branch is wired in the
+stub run. Reference/resource files are empty placeholders: only valid with
+nextflow -stub-run.
 """
 import argparse
 import csv
@@ -109,6 +111,20 @@ def generate(root, samtools="samtools", sam_only=False):
         else:
             row.update(purity="0.45", ploidy="", sequenza_segments="", sex="", hla_alleles="")
         rows.append(row)
+
+    # Expression branch inputs: one gene, one tissue, one cohort. Enough for
+    # the wiring; the stub processes never read the values.
+    (root / "genes.gtf").write_text(
+        'chr1\ttest\tgene\t1\t1000\t.\t+\t.\tgene_id "ENSG00000141510.16"; '
+        'gene_type "protein_coding"; gene_name "TP53";\n'
+        'chr1\ttest\texon\t1\t1000\t.\t+\t.\tgene_id "ENSG00000141510.16"; '
+        'gene_type "protein_coding"; gene_name "TP53";\n')
+    header = "ENSEMBL_ID\tGENE_NAME\tGROUP\tQUANTILE\tTPM\n"
+    (root / "gtex_db.tsv").write_text(
+        header + "ENSG00000141510\tTP53\tSkin - Sun Exposed (Lower leg)\t0.5\t12.5000\n"
+               + "ENSG00000141510\tTP53\tTestis\t0.5\t30.1000\n")
+    (root / "tcga_db.tsv").write_text(
+        header + "ENSG00000141510\tTP53\tTCGA-SKCM\t0.5\t15.0000\n")
 
     fields = ["patient_id", "tumor_r1", "tumor_r2", "normal_r1", "normal_r2", "tumor_bam", "normal_bam",
               "rna_baseline_bam", "rna_week6_bam", "purity", "ploidy", "sequenza_segments", "sex", "hla_alleles"]

@@ -10,6 +10,7 @@
  *     ─> HLA_TYPING         HLA-HD on the normal (or samplesheet hla_alleles)
  *     ─> PROXIMAL_VARIANTS  germline near somatic sites, WhatsHap phasing, VEP
  *     ─> NEOANTIGENS        VEP, bam-readcount (DNA + optional RNA), pVACseq (Sequenza purity), CCF (ploidy/CN)
+ *     ─> EXPRESSION         optional: featureCounts TPM, GTEx normal-tissue and TCGA cohort context
  *
  * One samplesheet row per patient: see assets/samplesheet_schema.md, and
  * docs/ARCHITECTURE.md for why each step is there.
@@ -22,6 +23,7 @@ include { SOMATIC_CALLING   } from './workflows/somatic_calling'
 include { HLA_TYPING        } from './workflows/hla_typing'
 include { PROXIMAL_VARIANTS } from './workflows/proximal_variants'
 include { NEOANTIGENS       } from './workflows/neoantigens'
+include { EXPRESSION        } from './workflows/expression'
 include { SAMTOOLS_FAIDX; CREATE_SEQUENCE_DICTIONARY; BWA_INDEX } from './modules/local/reference/prepare_genome'
 
 // ---------------------------------------------------------------------
@@ -126,6 +128,15 @@ workflow {
     vep_cache = file(requireParam('vep_cache'), checkIfExists: true)
     vep_plugins = file(requireParam('vep_plugins'), checkIfExists: true)
 
+    // ---- optional expression context: each reference table needs the
+    //      group name to report, and counting needs a GTF ----
+    if (params.gtex_db && !params.gtex_tissue) error "--gtex_db needs --gtex_tissue (a GROUP in that table)"
+    if (params.tcga_db && !params.tcga_cancer_type) error "--tcga_db needs --tcga_cancer_type (a GROUP in that table)"
+    gtex_db = params.gtex_db ? file(params.gtex_db, checkIfExists: true) : []
+    tcga_db = params.tcga_db ? file(params.tcga_db, checkIfExists: true) : []
+    rna_gtf = params.rna_gtf ? file(params.rna_gtf, checkIfExists: true) : []
+    if (!(params.rna_strandedness in [0, 1, 2])) error "--rna_strandedness must be 0 (unstranded), 1 (forward) or 2 (reverse)"
+
     if (!params.panel_of_normals) log.warn "No --panel_of_normals: Mutect2 will run without a PoN, so recurrent artefacts are not filtered"
     if (!params.contamination_sites) log.warn "No --contamination_sites: skipping GetPileupSummaries/CalculateContamination"
 
@@ -163,6 +174,13 @@ workflow {
 
     NEOANTIGENS(SOMATIC_CALLING.out.pass_vcf, bams_ch, PROXIMAL_VARIANTS.out.phased_vcf,
                 HLA_TYPING.out.alleles, clinical_ch, rna_ch, fasta, fai, vep_cache, vep_plugins)
+
+    // Expression context is opt-in: without a reference table there is
+    // nothing to compare against, so the CCF reports are the final output.
+    if (gtex_db || tcga_db) {
+        if (!rna_gtf) log.warn "No --rna_gtf: skipping RNA quantification, so expression context comes from the reference tables only"
+        EXPRESSION(rna_ch, NEOANTIGENS.out.ccf, rna_gtf, gtex_db, tcga_db)
+    }
 
     workflow.onComplete = {
         log.info "NeoadjVax finished: status: ${workflow.success ? 'OK' : 'FAILED'}: results: ${params.outdir}"
