@@ -1,8 +1,13 @@
-# Expression context: GTEx and TCGA
+# Expression context: GTEx, TCGA and the gene panel
 
-An optional sixth step (`workflows/expression.nf`) that answers two
-questions pVACseq does not: is this candidate's gene expressed in healthy
-tissue, and does this tumour type express it at all?
+An optional sixth step (`workflows/expression.nf`) with two outputs: the
+candidate reports gain expression context, and each patient gets a panel
+table for the genes that decide whether the tumour can present antigen at
+all, plus the melanoma drivers.
+
+The first half answers two questions pVACseq does not: is this candidate's
+gene expressed in healthy tissue, and does this tumour type express it at
+all?
 
 Both matter for a vaccine target:
 
@@ -132,6 +137,80 @@ antigen such as a CTAG/MAGE family gene is silent in every somatic tissue
 but high in testis, and averaging tissues together would hide exactly the
 genes worth looking at.
 
+## 4. The gene panel
+
+`<id>/gene_panel/<id>.gene_panel.tsv`, one row per panel gene
+(`bin/gene_panel_report.py`).
+
+A ranked candidate list is worth little if the tumour has lost the
+machinery to present it. B2M loss, HLA loss, JAK1/JAK2 truncation and
+CIITA/NLRC5 silencing are recurrent routes to checkpoint-inhibitor
+resistance, and none of them shows up in a per-candidate report, because
+the defect is in the pathway rather than in any one candidate. The driver
+half is context of a different kind: which canonical melanoma drivers this
+tumour carries, and whether those genes are expressed.
+
+For each gene the table combines three independent read-outs, any of which
+may be absent:
+
+| Read-out | From | Columns |
+| --- | --- | --- |
+| Expression | sample TPM vs the matched GTEx tissue and TCGA cohort | `Sample TPM`, `GTEx Range`, `GTEx Basis`, `GTEx Call`, `TCGA Range`, `TCGA Call` |
+| Copy number | the Sequenza segment(s) covering the gene (needs `--rna_gtf` for coordinates) | `Tumor CN`, `Minor CN`, `CN Call` |
+| Mutations | the VEP-annotated somatic VCF | `Mutations`, `Truncating` |
+
+`GTEx Call` is `DOWN` / `NORMAL` / `UP` against the quantile range in your
+table. The GTEx median-TPM summary has only medians, so with that file the
+call falls back to a fold change either side of the median
+(`--panel_fold`, default 4) and `GTEx Basis` says `median_x4` rather than
+`q0.25-q0.75`. Build the table with `--quantiles 0.25 0.5 0.75` from a
+per-sample matrix if you want real ranges.
+
+`CN Call` is relative to the sample ploidy when the samplesheet gives it,
+else 2: `LOSS` at a copy below baseline, `AMP` at `--panel_amp_gain`
+copies above it, and `LOH` whenever the minor copy number is 0. A gene
+straddling a breakpoint gets the overlap-weighted mean total copy number
+and the lowest minor copy number across its segments, so half a gene
+losing an allele still reads `LOH`.
+
+`Panel Flag` is factual, not a verdict:
+
+| Flag | Means |
+| --- | --- |
+| `LOSS_OF_FUNCTION` | expression `DOWN`, a CN loss or LOH, or a truncating mutation |
+| `ALTERED` | a non-truncating mutation, or amplification |
+| `OK` | none of the above, with data present |
+| `NA` | no data for this gene |
+
+**Read the two halves differently.** For HLA, B2M, TAP, the
+immunoproteasome, their regulators and the interferon genes,
+`LOSS_OF_FUNCTION` is the finding that matters: it argues against the
+whole candidate list being presentable. For the drivers, `ALTERED` is the
+interesting state — a BRAF V600E or NRAS Q61 hotspot is activating, not
+broken — so read the `Mutations` column, not the flag.
+
+The built-in panel is 79 genes in 9 pathways: class I and class II
+presentation, their regulators (CIITA, NLRC5, RFX, NFY), the
+immunoproteasome, the interferon route (IFNG, IFNGR1/2, JAK1, JAK2,
+STAT1, IRF1/2) and the melanoma drivers (MAPK: BRAF, NRAS, KRAS, HRAS,
+NF1, MAP2K1/2, RAC1, PPP6C, KIT, GNAQ, GNA11; cell cycle and p53: TP53,
+CDKN2A, CDK4, CCND1, RB1, MDM2; PI3K: PTEN, PIK3CA, AKT1; and ARID2,
+IDH1, STK19, DDX3X, SF3B1, BAP1, EIF1AX, MITF, TERT, CTNNB1). Replace it
+with `--gene_panel`, a `gene<TAB>pathway` table.
+
+Four caveats specific to this table:
+
+- **HLA class I expression and copy number are the least trustworthy rows
+  in it.** These are the most polymorphic genes in the genome, so short
+  reads mismap there. Real HLA allelic loss needs a dedicated caller
+  (LOHHLA, SpecHLA), not this.
+- **HLA-DRB3/4/5 cannot appear**: they are absent from GENCODE and GTEx.
+- **An empty `TERT` mutation cell means nothing.** TERT's recurrent
+  melanoma mutations are promoter, not coding, and a somatic exome call
+  set usually does not cover them.
+- **Low purity pushes genes towards `DOWN`**, because bulk expression is
+  diluted by stroma and immune infiltrate.
+
 ## What this is not
 
 - **The flag is a sort key, not a verdict.** Thresholds are arguments
@@ -145,11 +224,9 @@ genes worth looking at.
   not carry the variant. Neither is corrected for here.
 - **Bulk, not tumour-cell-specific.** TPM from a bulk RNA BAM mixes tumour
   and stroma, so low purity drags apparent tumour expression down.
-- **No HLA or antigen-presentation panel yet.** NeoDisc also calls each
-  antigen-processing gene (HLA-A/B/C, B2M, TAP1/2, the immunoproteasome,
-  CIITA) up or down against the same GTEx/TCGA ranges and pairs that with
-  copy number, which is how a tumour that cannot present anything gets
-  spotted. That is a natural next step here, and it would pair with the
-  HLA-LOH work that lives outside this branch.
+- **The panel is not an HLA-LOH caller.** It sees gene-level copy number
+  over the HLA locus, not allele-specific loss; that needs LOHHLA or
+  SpecHLA, which live outside this branch.
 - **No cross-timepoint expression change.** Week 6 TPM is published but not
-  compared to baseline.
+  compared to baseline, so a gene the treatment switched off between
+  baseline and week 6 is not called out.

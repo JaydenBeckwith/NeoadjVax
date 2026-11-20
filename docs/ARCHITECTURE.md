@@ -162,12 +162,30 @@ columns.
    is the evidence for the flag when present, else the TCGA cohort, which
    is what makes the step useful on a DNA-only patient.
 
+3. `bin/gene_panel_report.py` writes a per-patient status table for 79
+   genes in 9 pathways: class I and II presentation, their regulators
+   (CIITA, NLRC5, RFX, NFY), the immunoproteasome, the interferon route
+   (IFNG, IFNGR1/2, JAK1, JAK2, STAT1, IRF1/2) and the canonical melanoma
+   drivers (BRAF, NRAS, KRAS, HRAS, NF1, MAP2K1/2, RAC1, PPP6C, KIT,
+   GNAQ/11, TP53, CDKN2A, CDK4, CCND1, RB1, MDM2, PTEN, PIK3CA, AKT1,
+   ARID2, IDH1, STK19, DDX3X, SF3B1, BAP1, EIF1AX, MITF, TERT, CTNNB1).
+   Each gene gets an expression call against the GTEx/TCGA range, copy
+   number from the Sequenza segments covering it (gene coordinates come
+   from `--rna_gtf`, with minor copy number 0 reported as LOH), and the
+   somatic consequences VEP called in it, with truncating ones marked.
+   `Panel Flag` is `LOSS_OF_FUNCTION` / `ALTERED` / `OK` / `NA`. This is
+   the step that catches a tumour that cannot present antigen at all
+   (B2M or HLA loss, JAK1/JAK2 truncation), which no per-candidate report
+   would show. Replace the panel with `--gene_panel`. It is not an
+   HLA-LOH caller: copy number here is gene level, not allele specific.
+
 Reference tables are built once per cohort by
 `bin/build_expression_db.py` from public GTEx/TCGA downloads; no reference
 data ships in this repository.
 
 Published: `<id>/expression/<id>.<timepoint>.tpm.tsv`,
-`<id>/pvacseq_expression/<id>.{MHC_I,MHC_II,Combined}.aggregated.ccf.expression.tsv`.
+`<id>/pvacseq_expression/<id>.{MHC_I,MHC_II,Combined}.aggregated.ccf.expression.tsv`,
+`<id>/gene_panel/<id>.gene_panel.tsv`.
 
 ## Not covered
 
@@ -176,9 +194,8 @@ Published: `<id>/expression/<id>.<timepoint>.tpm.tsv`,
   itself still gets no gene or transcript expression (GX/TX) and its own
   expression filters and Allele Expr tier check do not apply; expression
   arrives as extra columns afterwards instead.
-- No antigen-presentation-machinery panel (HLA, B2M, TAP1/2,
-  immunoproteasome up/down against GTEx/TCGA) and no cross-timepoint
-  expression change.
+- No cross-timepoint expression change: week 6 TPM is published but not
+  compared to baseline.
 - No HLA-LOH and no in-pipeline Sequenza; purity, ploidy and segments
   come from existing Sequenza runs.
 - One FASTQ pair per sample.

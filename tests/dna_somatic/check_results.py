@@ -53,6 +53,8 @@ def check(manifest, trace, outdir):
         "EXPRESSION:FEATURECOUNTS": sum(len(timepoints) for timepoints in rna.values()),
         "EXPRESSION:GENE_TPM": sum(len(timepoints) for timepoints in rna.values()),
         "EXPRESSION:ANNOTATE_EXPRESSION": patients,
+        # the panel is per patient and needs neither RNA nor segments
+        "EXPRESSION:GENE_PANEL": patients,
     }
     for name, count in expected.items():
         if observed[name] != count:
@@ -66,6 +68,7 @@ def check(manifest, trace, outdir):
             outdir / patient / "pvacseq_ccf" / f"{patient}.Combined.aggregated.ccf.tsv",
             outdir / patient / "pvacseq" / "stub.log",
             outdir / patient / "pvacseq_expression" / f"{patient}.Combined.aggregated.ccf.expression.tsv",
+            outdir / patient / "gene_panel" / f"{patient}.gene_panel.tsv",
         ]
         for timepoint in rna.get(patient, []):
             paths.append(outdir / patient / "expression" / f"{patient}.{timepoint}.tpm.tsv")
@@ -80,7 +83,7 @@ def check(manifest, trace, outdir):
         has_week6 = "RNA VAF (week 6)" in paths[3].read_text()
         if has_week6 != ("rna_week6" in rna.get(patient, [])):
             raise ValueError(f"{paths[3]}: week 6 RNA columns {'present' if has_week6 else 'missing'} for {patient}")
-    print(f"PASS: {patients} patients reached pVACseq, CCF and expression annotation; "
+    print(f"PASS: {patients} patients reached pVACseq, CCF, expression annotation and the gene panel; "
           "wiring only, no biological predictions.")
 
 

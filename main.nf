@@ -10,7 +10,7 @@
  *     ─> HLA_TYPING         HLA-HD on the normal (or samplesheet hla_alleles)
  *     ─> PROXIMAL_VARIANTS  germline near somatic sites, WhatsHap phasing, VEP
  *     ─> NEOANTIGENS        VEP, bam-readcount (DNA + optional RNA), pVACseq (Sequenza purity), CCF (ploidy/CN)
- *     ─> EXPRESSION         optional: featureCounts TPM, GTEx normal-tissue and TCGA cohort context
+ *     ─> EXPRESSION         optional: featureCounts TPM, GTEx/TCGA context, presentation-machinery and driver panel
  *
  * One samplesheet row per patient: see assets/samplesheet_schema.md, and
  * docs/ARCHITECTURE.md for why each step is there.
@@ -179,7 +179,8 @@ workflow {
     // nothing to compare against, so the CCF reports are the final output.
     if (gtex_db || tcga_db) {
         if (!rna_gtf) log.warn "No --rna_gtf: skipping RNA quantification, so expression context comes from the reference tables only"
-        EXPRESSION(rna_ch, NEOANTIGENS.out.ccf, rna_gtf, gtex_db, tcga_db)
+        EXPRESSION(rna_ch, NEOANTIGENS.out.ccf, NEOANTIGENS.out.vep_vcf, clinical_ch,
+                   rna_gtf, gtex_db, tcga_db)
     }
 
     workflow.onComplete = {

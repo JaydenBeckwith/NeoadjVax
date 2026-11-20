@@ -73,5 +73,6 @@ workflow NEOANTIGENS {
     emit:
     pvacseq = PVACSEQ.out.results
     ccf     = ANNOTATE_CCF.out.tsv
+    vep_vcf = VEP_ANNOTATE.out.vcf
     rna_week6_vcf = RNA_WEEK6_ANNOTATOR.out.vcf
 }

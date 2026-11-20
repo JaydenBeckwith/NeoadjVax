@@ -89,6 +89,12 @@ bundled with the repository.
 table you built; a name that is not there stops the run and lists what is.
 `--rna_strandedness` (featureCounts `-s`: 0, 1, 2) has no safe default.
 
+The gene panel needs no extra downloads: its gene list is built in
+(`--gene_panel` replaces it with a `gene<TAB>pathway` table), and it reuses
+the same GTEx/TCGA tables, the `--rna_gtf` for gene coordinates, the
+samplesheet's Sequenza segments and the VEP-annotated somatic VCF the run
+already produces.
+
 ## 7. Containers
 
 | `containers.` key | Image | Notes |
