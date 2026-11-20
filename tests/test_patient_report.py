@@ -1,3 +1,4 @@
+import csv
 import importlib.util
 from pathlib import Path
 import sys
@@ -95,7 +96,84 @@ class Helpers(unittest.TestCase):
         self.assertAlmostEqual(uv["dipyrimidine_fraction"], 1.0)
 
 
+FUSION_HEADER = "ID\tGene\tBest Peptide\tBest Transcript\tAllele\tIC50 MT\t%ile MT\tExpr\tRead Support\tTier\n"
+FUSION_ROWS = (FUSION_HEADER
+               + "1\tEML4_ALK\tKLMNPQRST\tENST1\tHLA-A*02:01\t45\t0.3\t2.5\t30\tPass\n"
+               + "2\tAAA_BBB\tPQRSTUVWY\tENST2\tHLA-A*02:01\t80\t0.6\t0.05\t2\tLowReadSupport\n"
+               + "3\tCCC_DDD\tWYACDEFGH\tENST3\tHLA-A*02:01\t9000\t40\t5.0\t50\tPoor\n")
+
+
+class Fusions(unittest.TestCase):
+    def test_status_from_the_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            self.assertEqual(pr.read_pvacfuse(None)[0], "not_run")
+            self.assertEqual(pr.read_pvacfuse(tmp / "missing")[0], "not_run")
+            (tmp / "pvacfuse").mkdir()
+            (tmp / "pvacfuse" / "no_fusion_proteins.txt").write_text("nothing to predict\n")
+            self.assertEqual(pr.read_pvacfuse(tmp / "pvacfuse")[0], "no_proteins")
+
+    def test_reads_per_class_reports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "pvacfuse"
+            (d / "MHC_Class_I").mkdir(parents=True)
+            (d / "MHC_Class_II").mkdir(parents=True)
+            (d / "MHC_Class_I" / "P1.MHC_I.all_epitopes.aggregated.tsv").write_text(FUSION_ROWS)
+            (d / "MHC_Class_II" / "P1.MHC_II.all_epitopes.aggregated.tsv").write_text(FUSION_HEADER)
+            status, reports = pr.read_pvacfuse(d)
+        self.assertEqual(status, "ok")
+        self.assertEqual(len(reports["I"]), 3)
+        self.assertEqual(reports["II"], [])
+
+    def test_ranking_prefers_supported_fusions(self):
+        rows = [r for r in csv.DictReader(FUSION_ROWS.splitlines(), delimiter="\t")]
+        ranked = pr.rank_fusions(rows, 500, 2.0, 5.0, 0.1)
+        self.assertEqual([r["Gene"] for r in ranked], ["EML4_ALK", "AAA_BBB"])   # CCC_DDD is not a binder
+
+    def test_melanoma_partner_note(self):
+        self.assertIn("Spitz", pr.fusion_note("EML4_ALK"))
+        self.assertIn("resistance", pr.fusion_note("AGK-BRAF"))
+        self.assertEqual(pr.fusion_note("AAA_BBB"), "")
+
+    def test_counts_unique_fusion_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sf.tsv"
+            path.write_text("#FusionName\tJunctionReadCount\nA--B\t10\nA--B\t4\nC--D\t7\n")
+            self.assertEqual(pr.count_fusions(path), 2)
+        self.assertIsNone(pr.count_fusions(None))
+
+
 class Report(unittest.TestCase):
+    def test_fusion_section_renders_when_the_branch_ran(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "x.vcf").write_text(vcf(record("chr1", 3, "C", "T", "missense_variant", "BRAF", "p.Val600Glu")))
+            d = tmp / "pvacfuse"
+            (d / "MHC_Class_I").mkdir(parents=True)
+            (d / "MHC_Class_I" / "P1.MHC_I.all_epitopes.aggregated.tsv").write_text(FUSION_ROWS)
+            (tmp / "sf.tsv").write_text("#FusionName\tJunctionReadCount\nEML4--ALK\t30\n")
+            pr.main(["--patient", "P1", "--vcf", str(tmp / "x.vcf"), "--purity", "0.6", "--callable-mb", "10",
+                     "--pvacfuse-dir", str(d), "--fusion-predictions", str(tmp / "sf.tsv"),
+                     "-o", str(tmp / "r.tex")])
+            text = (tmp / "r.tex").read_text()
+        self.assertIn("STAR-Fusion called 1 fusion for this patient", text)
+        self.assertIn("EML4--ALK", text)
+        self.assertNotIn("CCC\\_DDD", text)        # not a binder
+        self.assertIn("Spitz", text)
+
+    def test_fusion_section_when_no_coding_fusion_protein(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "x.vcf").write_text(vcf(record("chr1", 3, "C", "T", "missense_variant", "BRAF", "p.Val600Glu")))
+            d = tmp / "pvacfuse"
+            d.mkdir()
+            (d / "no_fusion_proteins.txt").write_text("nothing\n")
+            pr.main(["--patient", "P1", "--vcf", str(tmp / "x.vcf"), "--purity", "0.6", "--callable-mb", "10",
+                     "--pvacfuse-dir", str(d), "-o", str(tmp / "r.tex")])
+            text = (tmp / "r.tex").read_text()
+        self.assertIn("no coding fusion protein", text)
+        self.assertIn("not a failure", text)
+
     def test_minimal_report_renders_with_missing_sections_marked(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
@@ -108,6 +186,7 @@ class Report(unittest.TestCase):
         self.assertIn("BRAF hotspot", text)
         self.assertIn("TMB-high", text)                   # 1 variant / 0.1 Mb
         self.assertIn("RNA support was not assessed", text)
+        self.assertIn("fusion branch did not run", text)
         self.assertIn("Allele-specific HLA LOH was not assessed", text)
         self.assertIn("Research use only", text)
         self.assertTrue(text.rstrip().endswith(r"\end{document}"))

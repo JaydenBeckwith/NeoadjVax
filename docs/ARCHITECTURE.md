@@ -192,7 +192,19 @@ Published: `<id>/expression/<id>.<timepoint>.tpm.tsv`,
 `<id>/pvacseq_expression/<id>.{MHC_I,MHC_II,Combined}.aggregated.ccf.expression.tsv`,
 `<id>/gene_panel/<id>.gene_panel.tsv`.
 
-## 7. REPORT (`workflows/report.nf`, on by default)
+## 7. FUSION (`workflows/fusion.nf`, optional)
+
+Runs with `--fusion true` for every patient that has a baseline tumour
+RNA FASTQ pair or an existing STAR-Fusion table: STAR-Fusion (or that
+table) -> AGFusion -> pVACfuse, on the same HLA alleles, pVACtools image
+and IEDB install as pVACseq. See [`FUSION.md`](FUSION.md) for the
+reference data it needs, why it is off by default, and how to read the
+candidates.
+
+Published: `<id>/fusion/star_fusion/`, `<id>/fusion/agfusion/`,
+`<id>/pvacfuse/`.
+
+## 8. REPORT (`workflows/report.nf`, on by default)
 
 See [`REPORT.md`](REPORT.md).
 
@@ -212,6 +224,10 @@ See [`REPORT.md`](REPORT.md).
    candidates. NeoDisc sections with no equivalent are listed as not
    assessed.
 3. `pdflatex` (twice) unless `--report_pdf false`.
+
+The report also reads the pVACfuse directory when the fusion branch ran,
+and distinguishes "branch did not run" from "ran, but no fusion had a
+coding partner pair".
 
 Published: `<id>/report/<id>.report.{tex,pdf}`,
 `<id>/report/<id>.rna_support.{summary.tsv,variants.tsv,pdf,png}`.

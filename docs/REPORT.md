@@ -94,15 +94,29 @@ the NeoDisc full, clinical and gene-panel templates. Sections:
 7. **RNA support across timepoints**: the figure and summary table above.
 8. **Expression context**: GTEx specificity and expression flags of the
    candidate genes.
-9. **Top neoantigen candidates**: top `--report_top_n` (default 15) MHC I
+9. **Fusion neoantigens**: only meaningful when the optional fusion
+   branch ran (`--fusion true`, `docs/FUSION.md` when that is written).
+   Three states, each reading differently: the branch did not run for
+   this patient; it ran but AGFusion found no coding fusion protein, so
+   pVACfuse had nothing to score; or pVACfuse wrote per-class reports,
+   in which case the top binders are tabled with junction/spanning read
+   support, FFPM, tier and a note for the melanoma-relevant partners
+   (ALK, ROS1, NTRK1/2/3, RET, MET, BRAF, MAP3K8, PRKCA). Fusions are
+   uncommon in cutaneous melanoma, so an empty table is the expected
+   result; they matter most in Spitz/spitzoid tumours, which have few
+   point mutations, and a BRAF fusion is also a MAPK-inhibitor
+   resistance route. The state is read from the pVACfuse directory
+   itself (`--pvacfuse-dir`): absent means not run, a
+   `no_fusion_proteins.txt` inside means no coding partner pair.
+10. **Top neoantigen candidates**: top `--report_top_n` (default 15) MHC I
    and MHC II binders, ranked by clonal first, then seen in baseline RNA,
    then expression flag OK, then IC50. pVACseq's own Tier is shown beside
    them.
-10. **Not assessed by NeoadjVax**: the NeoDisc sections with no
+11. **Not assessed by NeoadjVax**: the NeoDisc sections with no
     equivalent (allele-specific HLA LOH, genome-wide CN figures,
     multi-caller overlap, TAAs, inflammation score, virus detection, mass
     spectrometry, QC summaries).
-11. **Methods in brief.**
+12. **Methods in brief.**
 
 Every input but the VCF and purity is optional. A patient without RNA, or
 a run without `--gtex_db`/`--tcga_db`, still gets a report; the sections

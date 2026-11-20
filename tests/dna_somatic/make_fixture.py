@@ -2,11 +2,14 @@
 """Generate deterministic synthetic tumour/normal DNA inputs; no patient data.
 
 P1 enters as already-aligned BAMs with HLA alleles in the samplesheet, a
-Sequenza segments file, and baseline and week 6 RNA BAMs (copies of its
+Sequenza segments file, an existing STAR-Fusion predictions table, and
+baseline and week 6 RNA BAMs (copies of its
 tumour BAM; the week 6 index is named <x>.bai rather than <x>.bam.bai); P2 enters as FASTQ pairs with no HLA alleles, so it
-goes through alignment and HLA-HD. A tiny GTF and GTEx/TCGA expression
-tables are written too, so the optional expression branch is wired in the
-stub run. Reference/resource files are empty placeholders: only valid with
+goes through alignment and HLA-HD, plus an RNA FASTQ pair so the fusion
+branch runs STAR-Fusion for it. A tiny GTF and GTEx/TCGA expression tables
+are written too, so the optional expression branch is wired in the stub
+run, and placeholder AGFusion/pyensembl/CTAT paths so the fusion branch
+passes its launch-time checks. Reference/resource files are empty placeholders: only valid with
 nextflow -stub-run.
 """
 import argparse
@@ -74,6 +77,27 @@ def generate(root, samtools="samtools", sam_only=False):
         (root / name).mkdir()
         (root / name / "STUB_ONLY.txt").write_text("Not a reference cache. Used only with nextflow -stub-run.\n")
 
+    # Fusion branch inputs. P1 brings an existing STAR-Fusion table (so no
+    # STAR-Fusion task); P2 brings an RNA FASTQ pair (so STAR-Fusion runs).
+    # The reference paths below only have to satisfy main.nf's launch-time
+    # checks: every fusion process is stubbed, so nothing reads them.
+    sf_header = ("#FusionName\tJunctionReadCount\tSpanningFragCount\tSpliceType\tLeftGene\t"
+                 "LeftBreakpoint\tRightGene\tRightBreakpoint\tLargeAnchorSupport\tFFPM\tannots\n")
+    starfusion_tsv = root / "P1.star-fusion.fusion_predictions.tsv"
+    starfusion_tsv.write_text(sf_header + "EML4--ALK\t12\t4\tONLY_REF_SPLICE\tEML4^ENSG1\tchr2:42000000:+\t"
+                                          "ALK^ENSG2\tchr2:29000000:-\tYES\t1.20\t[\"INTERCHROMOSOMAL\"]\n")
+    agfusion_db = root / "agfusion.homo_sapiens.111.db"
+    agfusion_db.write_bytes(b"")
+    pyensembl_cache = root / "pyensembl_cache"
+    (pyensembl_cache / "pyensembl" / "GRCh38" / "ensembl111").mkdir(parents=True)
+    (pyensembl_cache / "pyensembl" / "GRCh38" / "ensembl111" / "STUB_ONLY.db").write_bytes(b"")
+    pyfix = root / "agfusion_pyfix"
+    pyfix.mkdir()
+    (pyfix / "sitecustomize.py").write_text("# stub shim; the real one patches numpy/datacache\n")
+    ctat = root / "ctat_genome_lib"
+    (ctat / "ref_genome.fa.star.idx").mkdir(parents=True)
+    (ctat / "STUB_ONLY.txt").write_text("Not a CTAT library. Used only with nextflow -stub-run.\n")
+
     rows, inputs = [], []
     for patient in PATIENTS:
         row = {"patient_id": patient}
@@ -107,9 +131,16 @@ def generate(root, samtools="samtools", sam_only=False):
             segments = root / "P1_segments.txt"
             segments.write_text('"chromosome"\t"start.pos"\t"end.pos"\t"CNt"\t"A"\t"B"\n"chr1"\t1\t10000\t3\t2\t1\n')
             row.update(purity="0.62", ploidy="3.1", sequenza_segments=str(segments), sex="female",
-                       hla_alleles="HLA-A*02:01|HLA-B*07:02|DRB1*15:01")
+                       hla_alleles="HLA-A*02:01|HLA-B*07:02|DRB1*15:01",
+                       starfusion_tsv=str(starfusion_tsv))
         else:
-            row.update(purity="0.45", ploidy="", sequenza_segments="", sex="", hla_alleles="")
+            # P2 has no STAR-Fusion table, so the fusion branch runs STAR-Fusion
+            # on this pair. Same synthetic reads as its DNA FASTQ.
+            rna_r1, rna_r2 = root / "P2_rna_baseline_R1.fastq.gz", root / "P2_rna_baseline_R2.fastq.gz"
+            write_fastq(rna_r1, rna_r2, reference, "P2_rna_baseline")
+            inputs.append({"path": str(rna_r1), "sample": "P2_rna_baseline", "kind": "fastq", "reads": PAIRS})
+            row.update(purity="0.45", ploidy="", sequenza_segments="", sex="", hla_alleles="",
+                       rna_baseline_r1=str(rna_r1), rna_baseline_r2=str(rna_r2))
         rows.append(row)
 
     # Expression branch inputs: one gene, one tissue, one cohort. Enough for
@@ -127,11 +158,15 @@ def generate(root, samtools="samtools", sam_only=False):
         header + "ENSG00000141510\tTP53\tTCGA-SKCM\t0.5\t15.0000\n")
 
     fields = ["patient_id", "tumor_r1", "tumor_r2", "normal_r1", "normal_r2", "tumor_bam", "normal_bam",
-              "rna_baseline_bam", "rna_week6_bam", "purity", "ploidy", "sequenza_segments", "sex", "hla_alleles"]
+              "rna_baseline_bam", "rna_week6_bam", "rna_baseline_r1", "rna_baseline_r2", "starfusion_tsv",
+              "purity", "ploidy", "sequenza_segments", "sex", "hla_alleles"]
     write_csv(root / "samplesheet.csv", fields, rows)
     manifest = {"synthetic": True, "test_type": "wiring_only", "patients": list(PATIENTS),
                 "fastq_patients": ["P2"], "hla_typed_patients": ["P2"],
                 "rna_bams": {"P1": ["rna_baseline", "rna_week6"]}, "scatter": list(SCATTER),
+                # every fusion patient reaches AGFusion and pVACfuse; only the
+                # one without a STAR-Fusion table reaches STAR-Fusion
+                "fusion_patients": ["P1", "P2"], "starfusion_patients": ["P2"],
                 "inputs": inputs, "bam_generation_complete": not sam_only}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest

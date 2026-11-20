@@ -17,6 +17,8 @@ from what this pipeline produces and made melanoma-specific:
   * the presentation-machinery and driver panel flags;
   * RNA support of non-synonymous variants and clonal neoantigens across
     timepoints (rna_support.py's figure and table);
+  * fusion neoantigens from the optional STAR-Fusion/AGFusion/pVACfuse
+    branch, when it ran;
   * GTEx / TCGA expression context and the top MHC I and II candidates.
 
 NeoDisc sections with no NeoadjVax equivalent (virus detection, mass
@@ -36,6 +38,7 @@ Usage:
         [--gene-panel P1.gene_panel.tsv] \\
         [--class-i P1.MHC_I...tsv] [--class-ii P1.MHC_II...tsv] \\
         [--rna-support-summary P1.rna_support.summary.tsv] \\
+        [--pvacfuse-dir pvacfuse/ --fusion-predictions star-fusion.tsv] \\
         [--rna-support-figure P1.rna_support.pdf] [--timepoint-label Baseline ...] \\
         -o P1.report.tex
 """
@@ -338,6 +341,77 @@ def histogram_rows(values, edges):
             for i in range(len(counts))]
 
 
+# Fusions recurrently reported in melanoma, and what they mean. Kinase
+# fusions are the actionable ones and cluster in Spitz/spitzoid tumours;
+# a BRAF fusion is also an acquired route to MAPK-inhibitor resistance.
+# Used for labelling only: every fusion with a binder is listed.
+FUSION_PARTNERS = {
+    "ALK": "kinase fusion (Spitz)", "ROS1": "kinase fusion (Spitz)",
+    "NTRK1": "kinase fusion (Spitz)", "NTRK2": "kinase fusion (Spitz)",
+    "NTRK3": "kinase fusion (Spitz)", "RET": "kinase fusion (Spitz)",
+    "MET": "kinase fusion (Spitz)", "BRAF": "BRAF fusion (MAPK, resistance route)",
+    "MAP3K8": "MAP3K8 fusion (MAPK)", "PRKCA": "PRKCA fusion (Spitz)",
+    "AXL": "kinase fusion", "FGFR1": "kinase fusion", "PDGFRB": "kinase fusion",
+}
+
+
+def fusion_partners(gene):
+    """pVACfuse 'A_B' or 'A-B' gene field -> [partner, ...]."""
+    return [p for p in re.split(r"[_\-]", (gene or "").strip()) if p]
+
+
+def fusion_note(gene):
+    for partner in fusion_partners(gene):
+        if partner in FUSION_PARTNERS:
+            return FUSION_PARTNERS[partner]
+    return ""
+
+
+def read_pvacfuse(directory):
+    """pvacfuse/ -> (status, {"I": rows, "II": rows}).
+
+    status is one of:
+      not_run        the branch did not run for this patient
+      no_proteins    AGFusion produced no coding fusion protein (the module
+                     writes no_fusion_proteins.txt and skips pVACfuse)
+      ok             pVACfuse wrote its per-class reports
+    """
+    reports = {"I": [], "II": []}
+    if not directory or not Path(directory).is_dir():
+        return "not_run", reports
+    directory = Path(directory)
+    if (directory / "no_fusion_proteins.txt").is_file():
+        return "no_proteins", reports
+    found = False
+    for mhc in ("I", "II"):
+        for path in sorted((directory / f"MHC_Class_{mhc}").glob("*.all_epitopes.aggregated.tsv")):
+            reports[mhc] = read_tsv(path)
+            found = True
+            break
+    return ("ok" if found else "no_proteins"), reports
+
+
+def count_fusions(path):
+    """Fusions in a STAR-Fusion predictions table, or None."""
+    rows = read_tsv(path)
+    if not rows:
+        return None
+    key = next((c for c in rows[0] if c.lstrip("#").strip() in ("FusionName", "fusion_name")), None)
+    return len({(r.get(key) or "").strip() for r in rows if (r.get(key) or "").strip()}) if key else len(rows)
+
+
+def rank_fusions(rows, ic50_max, pct_max, min_reads, min_expr):
+    """pVACfuse binders, best first: read support, then expression, then IC50."""
+    def key(row):
+        reads = rs.parse_float(row.get("Read Support"))
+        expr = rs.parse_float(row.get("Expr"))
+        ic50 = rs.parse_float(row.get("IC50 MT"))
+        return (not (reads is not None and reads >= min_reads),
+                not (expr is not None and expr >= min_expr),
+                ic50 if ic50 is not None else 1e9)
+    return sorted((r for r in rows if binder(r, ic50_max, pct_max)), key=key)
+
+
 # ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
@@ -393,6 +467,7 @@ def build_report(args):
     class_i_rows = read_tsv(args.class_i)
     class_ii_rows = read_tsv(args.class_ii)
     rna_summary = read_tsv(args.rna_support_summary)
+    fusion_status, fusion_reports = read_pvacfuse(args.pvacfuse_dir)
     timepoints = args.timepoint_label or []
 
     ns_ccf = [ccfs[rs.variant_key(v)] for v in non_syn if ccfs.get(rs.variant_key(v)) is not None]
@@ -435,6 +510,11 @@ def build_report(args):
                                                             ("LOSS_OF_FUNCTION", "INHIBITORY_GAIN")
                                                             and not r.get("Pathway", "").startswith("driver_"))))
          if panel_rows else "NA"),
+        ("Fusion neoantigens MHC I / MHC II",
+         (f"{sum(1 for r in fusion_reports['I'] if binder(r, args.class_i_ic50, args.class_i_percentile))} / "
+          f"{sum(1 for r in fusion_reports['II'] if binder(r, args.class_ii_ic50, args.class_ii_percentile))}")
+         if fusion_status == "ok" else
+         ("none (no coding fusion protein)" if fusion_status == "no_proteins" else "NA (fusion branch not run)")),
         ("Predicted neoantigens MHC I / MHC II (variants)",
          f"{sum(1 for r in class_i_rows if binder(r, args.class_i_ic50, args.class_i_percentile))} / "
          f"{sum(1 for r in class_ii_rows if binder(r, args.class_ii_ic50, args.class_ii_percentile))}"
@@ -643,7 +723,66 @@ def build_report(args):
                          caption=f"Top {len(ranked)} {label} candidates of "
                                  f"{sum(1 for r in rows_in if binder(r, ic50, pct))} binders"))
 
-    # 9. Not assessed ---------------------------------------------------------
+    # 9. Fusion neoantigens ---------------------------------------------------
+    out.append(r"\section{Fusion neoantigens}")
+    n_called = count_fusions(args.fusion_predictions)
+    if fusion_status == "not_run":
+        out.append(not_available("The fusion branch did not run for this patient (--fusion false, or no tumour "
+                                 "RNA reads and no STAR-Fusion table in the samplesheet), so fusion neoantigens "
+                                 "were not assessed."))
+    else:
+        out.append("Gene fusions are an uncommon source of neoantigens in cutaneous melanoma, which is driven by "
+                   "a high UV point-mutation load rather than by structural rearrangement, so an empty table here "
+                   "is the expected result. They matter when they appear: kinase fusions (ALK, ROS1, NTRK1/2/3, "
+                   "RET, MET, BRAF) are recurrent in Spitz and spitzoid tumours, which carry few point mutations "
+                   "and so few conventional candidates, and a BRAF fusion is also an acquired route to "
+                   "MAPK-inhibitor resistance. A fusion junction peptide is wholly tumour-specific, so it has no "
+                   "wild-type counterpart to tolerise against.\n")
+        if n_called is not None:
+            out.append(f"STAR-Fusion called {n_called} fusion{'' if n_called == 1 else 's'} for this patient. ")
+        if fusion_status == "no_proteins":
+            out.append("None of them gave AGFusion a coding partner pair, so there was no fusion protein for "
+                       "pVACfuse to score. This is not a failure: most fusion calls are intergenic, out of frame "
+                       "or non-coding on at least one side.\n")
+        else:
+            counts = {mhc: sum(1 for r in fusion_reports[mhc]
+                               if binder(r, getattr(args, f"class_{mhc.lower()}_ic50"),
+                                         getattr(args, f"class_{mhc.lower()}_percentile")))
+                      for mhc in ("I", "II")}
+            out.append(f"pVACfuse scored {len(fusion_reports['I'])} class I and {len(fusion_reports['II'])} class II "
+                       f"fusion epitopes, of which {counts['I']} and {counts['II']} pass the binder thresholds "
+                       "used elsewhere in this report.\n")
+            for mhc, label in (("I", "MHC class I"), ("II", "MHC class II")):
+                ranked = rank_fusions(fusion_reports[mhc],
+                                      getattr(args, f"class_{mhc.lower()}_ic50"),
+                                      getattr(args, f"class_{mhc.lower()}_percentile"),
+                                      args.fusion_min_reads, args.fusion_min_expr)[:args.top_n]
+                if not ranked:
+                    out.append(not_available(f"No {label} fusion binders."))
+                    continue
+                rows = []
+                for r in ranked:
+                    gene = r.get("Gene", "")
+                    rows.append([tex(gene.replace("_", "--")), r"\texttt{" + tex(r.get("Best Peptide")) + "}",
+                                 tex((r.get("Allele") or "").replace("HLA-", "")),
+                                 num(rs.parse_float(r.get("IC50 MT")), 0),
+                                 num(rs.parse_float(r.get("%ile MT")), 2),
+                                 num(rs.parse_float(r.get("Read Support")), 0),
+                                 num(rs.parse_float(r.get("Expr")), 2),
+                                 tex(r.get("Tier", "NA")), tex(fusion_note(gene) or "-")])
+                out.append(table(["Fusion", "Best peptide", "Allele", "IC50", "%ile", "Reads", "Expr", "Tier", "Note"],
+                                 rows, spec="l>{\\raggedright\\arraybackslash}p{0.16\\textwidth}lrrrrlp{0.2\\textwidth}",
+                                 size=r"\scriptsize", long=True,
+                                 caption=f"{label} fusion candidates, best read and expression support first"))
+            out.append(rf"Reads is pVACfuse's junction plus spanning read support and Expr its FFPM, both from the "
+                       rf"STAR-Fusion table; pVACfuse's own tiering flags read support below {args.fusion_min_reads:g} "
+                       rf"and expression below {args.fusion_min_expr:g}. A fusion candidate rests on the junction "
+                       r"being called correctly and in frame, which is a harder call than a point mutation: treat a "
+                       r"low-read fusion as a lead to confirm (IGV at the breakpoint, or RT-PCR) rather than as a "
+                       r"candidate. AGFusion's Ensembl release can differ from the VEP cache used for the SNV and "
+                       r"indel candidates, so the two halves of the report may not use identical transcript models." + "\n")
+
+    # 10. Not assessed --------------------------------------------------------
     out.append(r"\section{Not assessed by NeoadjVax}")
     out.append("These sections of the NeoDisc report have no NeoadjVax equivalent yet and are left out rather "
                "than filled with placeholders:\n")
@@ -654,11 +793,12 @@ def build_report(args):
                r"\item Tumour-associated antigens (TAAs) and cancer-testis antigen expression lists."
                r"\item Inflammation / T-cell infiltration score."
                r"\item Virus detection from RNA (not relevant to melanoma)."
+               r"\item Splicing, intron-retention and ERV/transposable-element neoantigens."
                r"\item Mass-spectrometry immunopeptidomics."
                r"\item Sequencing QC summaries (FastQC reports are published under \texttt{fastqc/} for FASTQ inputs)."
                r"\end{itemize}")
 
-    # 10. Methods -------------------------------------------------------------
+    # 11. Methods -------------------------------------------------------------
     out.append(r"\section{Methods in brief}")
     out.append(r"\begin{itemize}\setlength{\itemsep}{0pt}"
                r"\item Tumour/normal DNA: BWA-MEM, MarkDuplicates, BQSR; Mutect2 with germline resource, "
@@ -669,6 +809,7 @@ def build_report(args):
                r"\item CCF: $u = \mathrm{VAF}(p\,\mathrm{CN}_t + \mathrm{CN}_n(1-p))/p$, multiplicity "
                r"$m = \max(1, \mathrm{round}(u))$ capped at the major copy number, CCF $= \min(1, u/m)$."
                r"\item Expression: featureCounts TPM; GTEx and TCGA reference quantiles."
+               r"\item Fusions (optional): STAR-Fusion on the baseline tumour RNA, AGFusion, pVACfuse on the same HLA."
                r"\end{itemize}")
 
     # Appendix: full panel ----------------------------------------------------
@@ -701,6 +842,13 @@ def main(argv=None):
     parser.add_argument("--gene-panel", type=Path)
     parser.add_argument("--class-i", type=Path, help="MHC I aggregated report (expression- or CCF-annotated)")
     parser.add_argument("--class-ii", type=Path, help="MHC II aggregated report (expression- or CCF-annotated)")
+    parser.add_argument("--pvacfuse-dir", type=Path,
+                        help="pVACfuse output directory; absent means the fusion branch did not run")
+    parser.add_argument("--fusion-predictions", type=Path, help="STAR-Fusion predictions table")
+    parser.add_argument("--fusion-min-reads", type=float, default=5.0,
+                        help="pVACfuse flags read support below this (default: 5)")
+    parser.add_argument("--fusion-min-expr", type=float, default=0.1,
+                        help="pVACfuse flags FFPM below this (default: 0.1)")
     parser.add_argument("--rna-support-summary", type=Path)
     parser.add_argument("--rna-support-figure", type=Path)
     parser.add_argument("--timepoint-label", action="append", help="RNA timepoint labels, in order")

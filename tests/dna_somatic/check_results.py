@@ -24,6 +24,8 @@ def check(manifest, trace, outdir):
     typed = len(manifest["hla_typed_patients"])
     scatter = len(manifest["scatter"])
     rna = manifest.get("rna_bams", {})
+    fusion = manifest.get("fusion_patients", [])
+    starfusion = manifest.get("starfusion_patients", [])
     week6 = sum("rna_week6" in timepoints for timepoints in rna.values())
     expected = {
         "PREPROCESS_DNA:TRIM_GALORE": fastq * 2,
@@ -55,6 +57,11 @@ def check(manifest, trace, outdir):
         "EXPRESSION:ANNOTATE_EXPRESSION": patients,
         # the panel is per patient and needs neither RNA nor segments
         "EXPRESSION:GENE_PANEL": patients,
+        # STAR-Fusion only for a patient with no existing table; AGFusion and
+        # pVACfuse for every fusion patient
+        "FUSION:STAR_FUSION": len(starfusion),
+        "FUSION:AGFUSION": len(fusion),
+        "FUSION:PVACFUSE": len(fusion),
         # RNA support only where there is RNA; a report (and PDF) for everyone
         "REPORT:RNA_SUPPORT": sum(1 for timepoints in rna.values() if timepoints),
         "REPORT:PATIENT_REPORT": patients,
@@ -79,6 +86,13 @@ def check(manifest, trace, outdir):
         if rna.get(patient):
             paths.append(outdir / patient / "report" / f"{patient}.rna_support.summary.tsv")
             paths.append(outdir / patient / "report" / f"{patient}.rna_support.pdf")
+        if patient in fusion:
+            paths.append(outdir / patient / "fusion" / "agfusion" / "stub.log")
+            for mhc in ("I", "II"):
+                paths.append(outdir / patient / "pvacfuse" / f"MHC_Class_{mhc}" /
+                             f"{patient}.MHC_{mhc}.all_epitopes.aggregated.tsv")
+        if patient in starfusion:
+            paths.append(outdir / patient / "fusion" / "star_fusion" / "star-fusion.fusion_predictions.tsv")
         for timepoint in rna.get(patient, []):
             paths.append(outdir / patient / "expression" / f"{patient}.{timepoint}.tpm.tsv")
         if patient in manifest["hla_typed_patients"]:
@@ -92,10 +106,16 @@ def check(manifest, trace, outdir):
         has_week6 = "RNA VAF (week 6)" in paths[3].read_text()
         if has_week6 != ("rna_week6" in rna.get(patient, [])):
             raise ValueError(f"{paths[3]}: week 6 RNA columns {'present' if has_week6 else 'missing'} for {patient}")
+        # a patient with its own STAR-Fusion table must not have run STAR-Fusion
+        ran_starfusion = (outdir / patient / "fusion" / "star_fusion").is_dir()
+        if ran_starfusion != (patient in starfusion):
+            raise ValueError(f"{patient}: STAR-Fusion {'ran' if ran_starfusion else 'did not run'}, "
+                             "which does not match the samplesheet's starfusion_tsv")
         has_support = (outdir / patient / "report" / f"{patient}.rna_support.summary.tsv").exists()
         if has_support != bool(rna.get(patient)):
             raise ValueError(f"{patient}: RNA-support output {'present without' if has_support else 'missing despite'} RNA")
-    print(f"PASS: {patients} patients reached pVACseq, CCF, expression annotation, the gene panel and the report; "
+    print(f"PASS: {patients} patients reached pVACseq, CCF, expression annotation, the gene panel, "
+          f"{len(fusion)} reached pVACfuse, and every patient got a report; "
           "wiring only, no biological predictions.")
 
 

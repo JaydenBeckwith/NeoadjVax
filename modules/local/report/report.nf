@@ -64,7 +64,8 @@ process PATIENT_REPORT {
 
     input:
     tuple val(meta), path(readcounts_vcf), val(hla_alleles), val(purity), val(ploidy), val(sex), path(segments),
-          path(reports, stageAs: 'reports/*'), path(panel), path(rna_summary), path(rna_figure), val(timepoints)
+          path(reports, stageAs: 'reports/*'), path(panel), path(rna_summary), path(rna_figure), val(timepoints),
+          path(pvacfuse_dir), path(fusion_predictions)
     path fasta
     path fasta_fai
     path target_intervals
@@ -79,6 +80,9 @@ process PATIENT_REPORT {
     def panel_arg    = panel       ? "--gene-panel ${panel}" : ''
     def summary_arg  = rna_summary ? "--rna-support-summary ${rna_summary}" : ''
     def figure_arg   = rna_figure  ? "--rna-support-figure ${rna_figure}" : ''
+    // absent means the fusion branch did not run for this patient
+    def fusion_args  = (pvacfuse_dir ? "--pvacfuse-dir ${pvacfuse_dir}" : '') +
+                       (fusion_predictions ? " --fusion-predictions ${fusion_predictions}" : '')
     def tp_args      = timepoints.collect { it == 'rna_baseline' ? "--timepoint-label Baseline" : "--timepoint-label 'Week 6'" }.join(' ')
     // TMB denominator: explicit Mb, else the capture targets, else the called contigs (WGS)
     def tmb_arg      = params.tmb_callable_mb ? "--callable-mb ${params.tmb_callable_mb}"
@@ -103,6 +107,7 @@ process PATIENT_REPORT {
         \${class_i:+--class-i \$class_i} \\
         \${class_ii:+--class-ii \$class_ii} \\
         ${summary_arg} ${figure_arg} ${tp_args} \\
+        ${fusion_args} \\
         --project '${params.report_project}' \\
         --diagnosis '${params.report_diagnosis}' \\
         --tcga-cancer-type '${params.tcga_cancer_type}' \\
