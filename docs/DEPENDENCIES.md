@@ -102,12 +102,25 @@ already produces.
 | `fastqc`, `trimgalore`, `vep` | depot.galaxyproject.org Biocontainers | as before |
 | `bwa`, `samtools`, `bcftools` | Seqera community images (bwa+samtools, samtools 1.24, bcftools 1.23.1) | the same images nf-core/modules pins; `bwa` holds samtools too because alignment pipes into `samtools sort` |
 | `picard`, `gatk`, `whatshap` | local `.sif` on `/scratch/jo11/singularity_images/` (GATK 4.5.0.0; `whatshap.sif` is the image the PBS phasing script uses) | no pull needed |
-| `bam_readcount` | `docker://mgibio/bam_readcount_helper-cwl:1.1.1` | the image pVACtools' docs point to; helper arguments confirmed from the script inside this tag |
-| `vatools` | `docker://griffithlab/vatools:5.1.1` | `vcf-readcount-annotator` |
-| `pvactools` | `docker://griffithlab/pvactools:7.1.3` | also runs the Python helper scripts in `bin/` |
+| `bam_readcount` | `docker://mgibio/bam_readcount_helper-cwl:1.1.1` | pulled, not local: the module runs `/usr/bin/bam_readcount_helper.py`, which is in this image but not in a plain bam-readcount build |
+| `vatools` | local `/scratch/jo11/singularity_images/vatools.sif` | `vcf-readcount-annotator` |
+| `pvactools` | local `/scratch/jo11/singularity_images/pvactools.sif` | must be pVACtools >= 7.1 (`--tumor-purity`, the aggregated report columns, proximal variants read from the `HP` tag) and must carry a standalone IEDB at `params.pvacseq_iedb_install_dir`, else NetMHCpan/NetMHCIIpan have nothing to call. Also runs the Python helper scripts in `bin/` |
 | `subread` | `https://depot.galaxyproject.org/singularity/subread:2.0.6--he4a0461_2` | `featureCounts`, for the optional expression step |
 | `plots` | `docker://jupyter/scipy-notebook:x86_64-python-3.11.6` | matplotlib for the RNA-support figure (the pvactools image has none); large, so swap in any Python 3 image with matplotlib if you have one |
 | `texlive` | `docker://texlive/texlive:latest-medium` | `pdflatex` for the report; not a pinned release, so pin it by digest once pulled. Unused with `--report_pdf false` |
 
 `bin/prefetch_containers.sh` pulls every public one into the shared
-Singularity cache from a login node.
+Singularity cache from a login node. Entries that are already a local
+`.sif` path (picard, gatk, whatshap, vatools, pvactools, HLA-HD) are not
+listed there and are used where they sit. To swap another tool to a local
+image, point its `containers{}` entry at the path and remove it from that
+script's `IMAGES` array.
+
+Check a local image before relying on it:
+
+```bash
+module load singularity
+singularity exec /scratch/jo11/singularity_images/pvactools.sif pvacseq --version
+singularity exec /scratch/jo11/singularity_images/pvactools.sif ls /opt/iedb
+singularity exec /scratch/jo11/singularity_images/vatools.sif vcf-readcount-annotator --help | head -3
+```

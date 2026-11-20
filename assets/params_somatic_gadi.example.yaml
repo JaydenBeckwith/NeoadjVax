@@ -32,3 +32,25 @@ hlahd_container: /scratch/jo11/singularity_images/CHANGE_ME_hlahd.sif
 # pVACseq (defaults shown)
 # pvacseq_algorithms: MHCflurry MHCflurryEL NetMHCpan NetMHCpanEL NetMHCIIpan NetMHCIIpanEL
 # pvacseq_extra_args: ''
+
+# --- Optional: expression context (docs/EXPRESSION.md) -------------------
+# Both halves are off until a reference table is given. Build the tables
+# once with bin/build_expression_db.py; nothing ships in the repo.
+# gtex_db: /g/data/jo11/CHANGE_ME/gtex_skin.tsv
+# gtex_tissue: Skin - Sun Exposed (Lower leg)
+# tcga_db: /g/data/jo11/CHANGE_ME/tcga_skcm.tsv
+# tcga_cancer_type: TCGA-SKCM
+# Needed for TPM from the RNA BAMs and for gene coordinates in the panel.
+# rna_strandedness has no safe default: set it from the library prep.
+# rna_gtf: /g/data/jo11/CHANGE_ME/gencode.v46.annotation.gtf
+# rna_strandedness: 2
+# rna_paired_end: true
+
+# --- Optional: per-patient report (docs/REPORT.md) -----------------------
+# On by default. report_pdf false writes the .tex only and skips texlive.
+# report: true
+# report_pdf: true
+# report_project: NeoPeLe
+# report_top_n: 15
+# TMB denominator: unset uses target_intervals (WES) or the called contigs
+# tmb_callable_mb: 35
