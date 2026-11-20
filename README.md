@@ -22,6 +22,7 @@ tumour + normal DNA (FASTQ, or aligned BAM)
                           --phased-proximal-variants-vcf) → week 6 RNA columns
                         → CCF from ploidy/segments
   (EXPRESSION           optional GTEx/TCGA context and gene panel)
+  (FUSION               optional STAR-Fusion → AGFusion → pVACfuse, --fusion true)
   └─ REPORT             RNA support per timepoint (figure) → melanoma report (LaTeX → PDF)
 ```
 
@@ -58,6 +59,7 @@ nextflow run main.nf -profile gadi \
 - [`assets/samplesheet_schema.md`](assets/samplesheet_schema.md): the samplesheet, including purity, ploidy and segments.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): each step, why it is there, and the outputs.
 - [`docs/EXPRESSION.md`](docs/EXPRESSION.md): the optional GTEx/TCGA expression step and the presentation-machinery/driver panel, and building the reference tables.
+- [`docs/FUSION.md`](docs/FUSION.md): the optional STAR-Fusion/AGFusion/pVACfuse branch.
 - [`docs/REPORT.md`](docs/REPORT.md): the per-patient RNA-support figure and melanoma report.
 - [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md): every reference file and container, and where to get it.
 - [`docs/RUNNING_ON_GADI.md`](docs/RUNNING_ON_GADI.md): launching and monitoring on Gadi.
