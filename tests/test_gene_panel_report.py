@@ -18,6 +18,9 @@ GTF = "".join(
         ("chr7", 140719327, 140924929, "ENSG00000157764.13", "BRAF"),
         ("chr1", 64833229, 64966411, "ENSG00000162434.11", "JAK1"),
         ("chr17", 7668402, 7687550, "ENSG00000141510.16", "TP53"),
+        ("chr6", 30489406, 30494205, "ENSG00000204592.8", "HLA-E"),
+        ("chr6", 29826967, 29831125, "ENSG00000204632.12", "HLA-G"),
+        ("chr6", 31399784, 31415315, "ENSG00000204516.9", "MICB"),
     ])
 
 # B2M on a 1-copy LOH segment, BRAF amplified, JAK1 copy-neutral
@@ -30,7 +33,10 @@ GTEX = "ENSEMBL_ID\tGENE_NAME\tGROUP\tQUANTILE\tTPM\n" + "".join(
     f"{gid}\t{name}\t{SKIN}\t{q}\t{tpm}\n"
     for gid, name, low, high in [("ENSG00000166710", "B2M", 300, 800),
                                  ("ENSG00000157764", "BRAF", 5, 15),
-                                 ("ENSG00000162434", "JAK1", 20, 40)]
+                                 ("ENSG00000162434", "JAK1", 20, 40),
+                                 ("ENSG00000204592", "HLA-E", 20, 60),
+                                 ("ENSG00000204632", "HLA-G", 1, 5),
+                                 ("ENSG00000204516", "MICB", 10, 30)]
     for q, tpm in (("0.25", low), ("0.75", high)))
 
 GTEX_MEDIAN_ONLY = "ENSEMBL_ID\tGENE_NAME\tGROUP\tQUANTILE\tTPM\n" \
@@ -39,7 +45,10 @@ GTEX_MEDIAN_ONLY = "ENSEMBL_ID\tGENE_NAME\tGROUP\tQUANTILE\tTPM\n" \
 SAMPLE = "ENSEMBL_ID\tGENE_NAME\tTPM\tEXPRESSION_QUARTILE\n" \
          "ENSG00000166710\tB2M\t12.0000\t1\n" \
          "ENSG00000157764\tBRAF\t60.0000\t4\n" \
-         "ENSG00000162434\tJAK1\t25.0000\t3\n"
+         "ENSG00000162434\tJAK1\t25.0000\t3\n" \
+         "ENSG00000204592\tHLA-E\t400.0000\t4\n" \
+         "ENSG00000204632\tHLA-G\t90.0000\t4\n" \
+         "ENSG00000204516\tMICB\t0.5000\t1\n"
 
 VEP = '##fileformat=VCFv4.2\n' \
       '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. ' \
@@ -148,6 +157,59 @@ class GenePanelReport(unittest.TestCase):
                               files={"p.tsv": "gene\tpathway\nBRAF\tmy_genes\n"})
         self.assertEqual(list(rows), ["BRAF"])
         self.assertEqual(rows["BRAF"]["Pathway"], "my_genes")
+
+    def test_non_classical_hla_and_related_genes_are_in_the_panel(self):
+        rows = self.full()
+        for gene in ("HLA-E", "HLA-F", "HLA-G", "MR1", "CD1A", "CD1D",
+                     "MICA", "MICB", "ULBP1", "RAET1E"):
+            self.assertIn(gene, rows, gene)
+
+    def test_non_classical_genes_are_grouped_apart_from_classical_ones(self):
+        rows = self.full()
+        self.assertEqual(rows["HLA-G"]["Pathway"], "apm_non_classical")
+        self.assertEqual(rows["MICB"]["Pathway"], "nkg2d_ligands")
+        # the classical locus keeps its own group
+        self.assertEqual(rows["HLA-A"]["Pathway"], "apm_class_i")
+
+    def test_inhibitory_ligand_upregulation_is_the_adverse_finding(self):
+        # HLA-E and HLA-G engage NKG2A and ILT2/ILT4: gain suppresses the
+        # response, so UP is adverse where it would be unremarkable elsewhere
+        for gene in ("HLA-E", "HLA-G"):
+            row = self.full()[gene]
+            self.assertEqual(row["Adverse Direction"], "gain", gene)
+            self.assertEqual(row["GTEx Call"], "UP", gene)
+            self.assertEqual(row["Panel Flag"], "INHIBITORY_GAIN", gene)
+
+    def test_losing_an_inhibitory_ligand_is_not_called_a_defect(self):
+        sample = SAMPLE.replace("ENSG00000204632\tHLA-G\t90.0000\t4", "ENSG00000204632\tHLA-G\t0.0000\t0")
+        rows = self.run_panel("--sample-tpm", "TMP/low.tsv",
+                              "--gtex", "TMP/gtex.tsv", "--gtex-tissue", SKIN,
+                              files={"low.tsv": sample})
+        row = rows["HLA-G"]
+        self.assertEqual(row["GTEx Call"], "DOWN")
+        self.assertEqual(row["Panel Flag"], "ALTERED")
+
+    def test_nkg2d_ligand_loss_is_a_loss_of_function(self):
+        # losing MICA/MICB removes NK recognition, so it keeps loss polarity
+        row = self.full()["MICB"]
+        self.assertEqual(row["Adverse Direction"], "loss")
+        self.assertEqual(row["Panel Flag"], "LOSS_OF_FUNCTION")
+
+    def test_classical_hla_keeps_loss_polarity(self):
+        self.assertEqual(self.full()["HLA-A"]["Adverse Direction"], "loss")
+
+    def test_custom_panel_can_set_polarity(self):
+        rows = self.run_panel("--panel", "TMP/p.tsv", "--sample-tpm", "TMP/sample.tsv",
+                              "--gtex", "TMP/gtex.tsv", "--gtex-tissue", SKIN,
+                              files={"p.tsv": "gene\tpathway\tpolarity\nBRAF\tmine\tgain\nJAK1\tmine\tloss\n"})
+        self.assertEqual(rows["BRAF"]["Adverse Direction"], "gain")
+        self.assertEqual(rows["BRAF"]["Panel Flag"], "INHIBITORY_GAIN")
+        self.assertEqual(rows["JAK1"]["Adverse Direction"], "loss")
+
+    def test_custom_panel_rejects_an_unknown_polarity(self):
+        with self.assertRaises(SystemExit):
+            self.run_panel("--panel", "TMP/p.tsv",
+                           files={"p.tsv": "gene\tpathway\tpolarity\nBRAF\tmine\tsideways\n"})
 
     def test_segments_without_a_gtf_is_rejected(self):
         with self.assertRaises(SystemExit):

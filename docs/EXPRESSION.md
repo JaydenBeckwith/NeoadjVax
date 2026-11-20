@@ -173,37 +173,74 @@ straddling a breakpoint gets the overlap-weighted mean total copy number
 and the lowest minor copy number across its segments, so half a gene
 losing an allele still reads `LOH`.
 
-`Panel Flag` is factual, not a verdict:
+### Which direction is adverse
+
+Not every gene escapes by being lost, so each one carries an
+`Adverse Direction` of `loss` or `gain`, and `Panel Flag` reads it:
 
 | Flag | Means |
 | --- | --- |
-| `LOSS_OF_FUNCTION` | expression `DOWN`, a CN loss or LOH, or a truncating mutation |
-| `ALTERED` | a non-truncating mutation, or amplification |
+| `LOSS_OF_FUNCTION` | a `loss` gene that is `DOWN`, lost/LOH, or truncated |
+| `INHIBITORY_GAIN` | a `gain` gene that is `UP` or amplified |
+| `ALTERED` | a mutation, or a change in the non-adverse direction for this gene |
 | `OK` | none of the above, with data present |
 | `NA` | no data for this gene |
 
-**Read the two halves differently.** For HLA, B2M, TAP, the
-immunoproteasome, their regulators and the interferon genes,
-`LOSS_OF_FUNCTION` is the finding that matters: it argues against the
-whole candidate list being presentable. For the drivers, `ALTERED` is the
-interesting state — a BRAF V600E or NRAS Q61 hotspot is activating, not
-broken — so read the `Mutations` column, not the flag.
+Most of the panel is `loss`: HLA-A/B/C, B2M, TAP, the immunoproteasome,
+the regulators, the interferon genes, MR1, CD1 and the NKG2D ligands all
+let a tumour escape by going away.
 
-The built-in panel is 79 genes in 9 pathways: class I and class II
-presentation, their regulators (CIITA, NLRC5, RFX, NFY), the
-immunoproteasome, the interferon route (IFNG, IFNGR1/2, JAK1, JAK2,
-STAT1, IRF1/2) and the melanoma drivers (MAPK: BRAF, NRAS, KRAS, HRAS,
-NF1, MAP2K1/2, RAC1, PPP6C, KIT, GNAQ, GNA11; cell cycle and p53: TP53,
-CDKN2A, CDK4, CCND1, RB1, MDM2; PI3K: PTEN, PIK3CA, AKT1; and ARID2,
-IDH1, STK19, DDX3X, SF3B1, BAP1, EIF1AX, MITF, TERT, CTNNB1). Replace it
-with `--gene_panel`, a `gene<TAB>pathway` table.
+**HLA-E and HLA-G are the exception** and default to `gain`. They are
+inhibitory ligands — HLA-E engages NKG2A on NK and CD8 T cells, HLA-G
+engages ILT2/ILT4 and KIR2DL4 — so a tumour that *upregulates* them is
+actively suppressing the response, and `UP` is the finding. Losing them is
+not a defect, so it is recorded as `ALTERED` rather than dressed up as
+one. The pairing to look for is a classical-locus `LOSS_OF_FUNCTION`
+alongside a non-classical `INHIBITORY_GAIN`.
 
-Four caveats specific to this table:
+For the drivers neither direction is adverse: a BRAF V600E or NRAS Q61
+hotspot is activating, not broken, so read the `Mutations` column rather
+than the flag.
 
-- **HLA class I expression and copy number are the least trustworthy rows
-  in it.** These are the most polymorphic genes in the genome, so short
-  reads mismap there. Real HLA allelic loss needs a dedicated caller
-  (LOHHLA, SpecHLA), not this.
+### The panel
+
+94 genes in 11 pathways:
+
+| Pathway | Genes |
+| --- | --- |
+| `apm_class_i` | HLA-A/B/C, B2M, TAP1/2, TAPBP, CALR, PDIA3 |
+| `apm_non_classical` | HLA-E, HLA-F, HLA-G (class Ib), MR1, CD1A-E |
+| `nkg2d_ligands` | MICA, MICB, ULBP1-3, RAET1E/G/L |
+| `apm_class_ii` | CD74, HLA-DMA/DMB, HLA-DPA1/DPB1, HLA-DQA1/DQB1, HLA-DRA/DRB1 |
+| `apm_regulation` | CIITA, NLRC5, RFX5, RFXANK, RFXAP, NFYA/B/C, CREB1 |
+| `immunoproteasome` | PSMB5-10, PSME1-3, POMP, PSMF1 |
+| `interferon_signalling` | IFNG, IFNGR1/2, JAK1, JAK2, STAT1, IRF1/2 |
+| `driver_mapk` | BRAF, NRAS, KRAS, HRAS, NF1, MAP2K1/2, RAC1, PPP6C, KIT, GNAQ, GNA11 |
+| `driver_cell_cycle_p53` | TP53, CDKN2A, CDK4, CCND1, RB1, MDM2 |
+| `driver_pi3k` | PTEN, PIK3CA, AKT1 |
+| `driver_other` | ARID2, IDH1, STK19, DDX3X, SF3B1, BAP1, EIF1AX, MITF, TERT, CTNNB1 |
+
+The NKG2D ligands are MHC class I-*related*, not HLA: they are read by NK
+and gamma-delta T cells rather than by CD8 T cells, and they are in the
+panel because losing them is a separate escape route that the classical
+locus does not show.
+
+Replace the whole panel with `--gene_panel`, a
+`gene<TAB>pathway[<TAB>loss|gain]` table; the third column is optional and
+defaults to `loss`.
+
+Caveats specific to this table:
+
+- **HLA expression and copy number are the least trustworthy rows in
+  it.** These are the most polymorphic genes in the genome, so short reads
+  mismap there. Real HLA allelic loss needs a dedicated caller (LOHHLA,
+  SpecHLA), not this. It applies to HLA-E/F/G and MICA/MICB too, which are
+  polymorphic and sit in the same region.
+- **MICA/MICB surface loss is mostly proteolytic shedding.** That is
+  post-translational, so neither RNA nor DNA sees it: a normal row here
+  does not mean the ligand is on the cell surface.
+- **HLA-F's direction is unsettled** (open conformers, KIR3DS1), so it
+  sits at `loss` by default; do not read its flag as firmly as the rest.
 - **HLA-DRB3/4/5 cannot appear**: they are absent from GENCODE and GTEx.
 - **An empty `TERT` mutation cell means nothing.** TERT's recurrent
   melanoma mutations are promoter, not coding, and a somatic exome call

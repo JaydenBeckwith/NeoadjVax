@@ -26,25 +26,39 @@ For every panel gene this combines three independent read-outs:
 
 Each is optional: give what the run produced and the rest reads NA.
 
-Panel Flag is deliberately factual, not a verdict:
+Panel Flag is deliberately factual, not a verdict, and which direction
+counts as adverse depends on the gene:
 
-    LOSS_OF_FUNCTION  expression DOWN, CN loss/LOH, or a truncating mutation
-    ALTERED           a non-truncating mutation, or amplification
+    LOSS_OF_FUNCTION  loss-polarity gene: expression DOWN, CN loss/LOH, or
+                      a truncating mutation
+    INHIBITORY_GAIN   gain-polarity gene: expression UP or amplified
+    ALTERED           a non-truncating mutation, or a change in the
+                      direction that is not the adverse one for this gene
     OK                nothing of the above
     NA                no data for this gene
 
-Read it per half. For HLA, B2M, TAP, the immunoproteasome and the
-interferon genes, LOSS_OF_FUNCTION is the finding that matters: it argues
-against a vaccine being presentable. For the drivers, ALTERED is the
-interesting state (a BRAF or NRAS hotspot is activating, not broken), and
-the mutation column, not the flag, is what to read.
+Most of the panel is loss polarity: for HLA-A/B/C, B2M, TAP, the
+immunoproteasome, the interferon genes, MR1, CD1 and the NKG2D ligands,
+losing the gene is what lets a tumour escape. HLA-E and HLA-G are the
+other way round - they are inhibitory ligands, so a tumour that
+upregulates them is suppressing the response, and gain is the finding.
+For the drivers neither direction is "adverse": a BRAF or NRAS hotspot is
+activating, not broken, so read the mutation column rather than the flag.
 
 Caveats that matter when reading the table:
 
-  * HLA class I genes are the most polymorphic in the genome, so short
-    reads mismap there: both their expression and their copy number are
-    less trustworthy than the rest of the panel, and real HLA allelic loss
-    needs a dedicated caller (LOHHLA, SpecHLA), not this.
+  * HLA genes are the most polymorphic in the genome, so short reads
+    mismap there: both their expression and their copy number are less
+    trustworthy than the rest of the panel, and real HLA allelic loss
+    needs a dedicated caller (LOHHLA, SpecHLA), not this. The same applies
+    to HLA-E/F/G and to MICA/MICB, which are polymorphic and sit in the
+    same region.
+  * MICA/MICB surface loss is mostly proteolytic shedding, which is
+    post-translational and so invisible to both RNA and DNA: a normal row
+    here does not mean the ligand is on the cell surface.
+  * HLA-F's immunological direction is unsettled (open conformers,
+    KIR3DS1), so it is left at loss polarity by default; do not read its
+    flag as strongly as the rest.
   * HLA-DRB3/4/5 are absent from GENCODE and GTEx, so they cannot appear.
   * TERT's recurrent melanoma mutations are promoter, not coding, and are
     usually not in a somatic exome call set at all; an empty TERT mutation
@@ -72,8 +86,17 @@ from pathlib import Path
 # regulation) is visible as a block rather than as scattered rows.
 # Override wholesale with --panel.
 DEFAULT_PANEL = {
-    "apm_class_i": ["HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "B2M", "TAP1", "TAP2",
+    "apm_class_i": ["HLA-A", "HLA-B", "HLA-C", "B2M", "TAP1", "TAP2",
                     "TAPBP", "CALR", "PDIA3"],
+    # Class Ib and the lipid/metabolite presenters. HLA-E and HLA-G are
+    # inhibitory ligands (NKG2A, ILT2/ILT4), so for those two it is gain,
+    # not loss, that signals escape - see GAIN_POLARITY.
+    "apm_non_classical": ["HLA-E", "HLA-F", "HLA-G", "MR1",
+                          "CD1A", "CD1B", "CD1C", "CD1D", "CD1E"],
+    # MHC class I-related, not HLA: NKG2D ligands read by NK and gamma-delta
+    # T cells. Losing them is an escape route from NK killing.
+    "nkg2d_ligands": ["MICA", "MICB", "ULBP1", "ULBP2", "ULBP3",
+                      "RAET1E", "RAET1G", "RAET1L"],
     "apm_class_ii": ["CD74", "HLA-DMA", "HLA-DMB", "HLA-DPA1", "HLA-DPB1", "HLA-DQA1",
                      "HLA-DQB1", "HLA-DRA", "HLA-DRB1"],
     "apm_regulation": ["CIITA", "NLRC5", "RFX5", "RFXANK", "RFXAP", "NFYA", "NFYB", "NFYC", "CREB1"],
@@ -89,6 +112,14 @@ DEFAULT_PANEL = {
     "driver_other": ["ARID2", "IDH1", "STK19", "DDX3X", "SF3B1", "BAP1", "EIF1AX",
                      "MITF", "TERT", "CTNNB1"],
 }
+
+# Genes where gain, not loss, is the adverse finding. HLA-E engages the
+# inhibitory receptor NKG2A on NK and CD8 T cells and HLA-G engages
+# ILT2/ILT4 and KIR2DL4, so a tumour that upregulates them is actively
+# suppressing the response rather than failing to present. Everything else
+# in the panel defaults to loss polarity. Override per gene with a third
+# column in --panel.
+GAIN_POLARITY = {"HLA-E", "HLA-G"}
 
 TRUNCATING = ("stop_gained", "frameshift_variant", "splice_acceptor_variant",
               "splice_donor_variant", "start_lost", "stop_lost", "transcript_ablation")
@@ -118,17 +149,26 @@ def norm_chrom(chrom):
 
 
 def read_panel(path):
-    """gene<TAB>pathway table -> {pathway: [genes]}, header tolerated."""
-    panel = {}
+    """gene<TAB>pathway[<TAB>polarity] -> ({pathway: [genes]}, {gain genes}).
+
+    The third column is optional and is "loss" (the default) or "gain";
+    "gain" marks a gene where upregulation rather than loss is the adverse
+    finding, as for the inhibitory class Ib ligands.
+    """
+    panel, gain = {}, set()
     with open_text(path) as handle:
         for line in handle:
             fields = [f.strip() for f in line.rstrip("\n").split("\t")]
             if len(fields) < 2 or not fields[0] or fields[0].lower() in ("gene", "#gene"):
                 continue
             panel.setdefault(fields[1], []).append(fields[0])
+            if len(fields) > 2 and fields[2].lower() == "gain":
+                gain.add(fields[0])
+            elif len(fields) > 2 and fields[2] and fields[2].lower() != "loss":
+                raise SystemExit(f"{path}: polarity for {fields[0]} must be 'loss' or 'gain', got '{fields[2]}'")
     if not panel:
         raise SystemExit(f"{path}: no gene<TAB>pathway rows found")
-    return panel
+    return panel, gain
 
 
 def read_expression_db(path):
@@ -318,18 +358,29 @@ def copy_number_call(total, minor, baseline, amp_gain):
     return ",".join(calls) if calls else "NEUTRAL"
 
 
-def panel_flag(expression, cn_call, mutations):
+def panel_flag(expression, cn_call, mutations, polarity="loss"):
+    """The adverse finding for this gene, or ALTERED/OK/NA.
+
+    A gain-polarity gene that is lost or truncated is not flagged
+    LOSS_OF_FUNCTION: losing an inhibitory ligand does not help the tumour,
+    so it is recorded as ALTERED rather than dressed up as a defect.
+    """
     truncating = [m for m in mutations if m[0] in TRUNCATING]
-    if expression == "DOWN" or "LOSS" in cn_call or "LOH" in cn_call or truncating:
+    lost = expression == "DOWN" or "LOSS" in cn_call or "LOH" in cn_call or truncating
+    gained = expression == "UP" or "AMP" in cn_call
+    if polarity == "gain":
+        if gained:
+            return "INHIBITORY_GAIN"
+    elif lost:
         return "LOSS_OF_FUNCTION"
-    if mutations or "AMP" in cn_call:
+    if mutations or lost or gained:
         return "ALTERED"
     if expression == "NA" and cn_call == "NA" and not mutations:
         return "NA"
     return "OK"
 
 
-def build_rows(panel, args, sample, gtex, tcga, spans, segments, mutations):
+def build_rows(panel, gain_polarity, args, sample, gtex, tcga, spans, segments, mutations):
     baseline = args.ploidy if args.ploidy else 2.0
     rows = []
     for pathway in panel:
@@ -349,21 +400,23 @@ def build_rows(panel, args, sample, gtex, tcga, spans, segments, mutations):
             formatted = ";".join(f"{consequence}:{change}" for consequence, change in gene_mutations) or "-"
             truncating = "yes" if any(m[0] in TRUNCATING for m in gene_mutations) else "no"
 
+            polarity = "gain" if gene in gain_polarity else "loss"
             rows.append([pathway, gene, fmt(sample_tpm), f"{fmt(low)}-{fmt(high)}" if low is not None else "NA",
                          basis, call, f"{fmt(tcga_low)}-{fmt(tcga_high)}" if tcga_low is not None else "NA",
                          tcga_call, fmt(total_cn, 2), fmt(minor_cn, 2), cn_call, formatted, truncating,
-                         panel_flag(call, cn_call, gene_mutations)])
+                         polarity, panel_flag(call, cn_call, gene_mutations, polarity)])
     return rows
 
 
 COLUMNS = ["Pathway", "Gene", "Sample TPM", "GTEx Range", "GTEx Basis", "GTEx Call",
            "TCGA Range", "TCGA Call", "Tumor CN", "Minor CN", "CN Call", "Mutations",
-           "Truncating", "Panel Flag"]
+           "Truncating", "Adverse Direction", "Panel Flag"]
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--panel", type=Path, help="gene<TAB>pathway table replacing the built-in panel")
+    parser.add_argument("--panel", type=Path,
+                        help="gene<TAB>pathway[<TAB>loss|gain] table replacing the built-in panel")
     parser.add_argument("--sample-tpm", type=Path, help="this sample's TPM table from gene_tpm.py")
     parser.add_argument("--gtex", type=Path)
     parser.add_argument("--gtex-tissue")
@@ -387,7 +440,7 @@ def main(argv=None):
     if args.segments and not args.gtf:
         parser.error("--segments needs --gtf to locate each gene")
 
-    panel = read_panel(args.panel) if args.panel else DEFAULT_PANEL
+    panel, gain_polarity = read_panel(args.panel) if args.panel else (DEFAULT_PANEL, GAIN_POLARITY)
     genes = {gene for pathway in panel for gene in panel[pathway]}
 
     gtex = read_expression_db(args.gtex) if args.gtex else {}
@@ -403,16 +456,16 @@ def main(argv=None):
             available = sorted({g for groups in db.values() for g in groups})
             raise SystemExit(f"{name} '{group}' is not in the table. Available: " + ", ".join(available))
 
-    rows = build_rows(panel, args, sample, gtex, tcga, spans, segments, mutations)
+    rows = build_rows(panel, gain_polarity, args, sample, gtex, tcga, spans, segments, mutations)
     with args.output.open("w", newline="") as handle:
         writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
         writer.writerow(COLUMNS)
         writer.writerows(rows)
 
-    flagged = [row for row in rows if row[-1] == "LOSS_OF_FUNCTION"]
-    print(f"{len(rows)} panel genes; {len(flagged)} with loss-of-function evidence")
+    flagged = [row for row in rows if row[-1] in ("LOSS_OF_FUNCTION", "INHIBITORY_GAIN")]
+    print(f"{len(rows)} panel genes; {len(flagged)} with an adverse finding")
     for row in flagged:
-        print(f"  {row[0]}\t{row[1]}\texpression={row[5]}\tCN={row[10]}\tmutations={row[11]}")
+        print(f"  {row[0]}\t{row[1]}\t{row[-1]}\texpression={row[5]}\tCN={row[10]}\tmutations={row[11]}")
 
 
 if __name__ == "__main__":

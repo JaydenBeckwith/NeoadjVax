@@ -162,10 +162,12 @@ columns.
    is the evidence for the flag when present, else the TCGA cohort, which
    is what makes the step useful on a DNA-only patient.
 
-3. `bin/gene_panel_report.py` writes a per-patient status table for 79
-   genes in 9 pathways: class I and II presentation, their regulators
-   (CIITA, NLRC5, RFX, NFY), the immunoproteasome, the interferon route
-   (IFNG, IFNGR1/2, JAK1, JAK2, STAT1, IRF1/2) and the canonical melanoma
+3. `bin/gene_panel_report.py` writes a per-patient status table for 94
+   genes in 11 pathways: class I and II presentation, the non-classical
+   class Ib genes (HLA-E, HLA-F, HLA-G) with MR1 and CD1A-E, the
+   MHC class I-related NKG2D ligands (MICA, MICB, ULBP1-3, RAET1E/G/L),
+   their regulators (CIITA, NLRC5, RFX, NFY), the immunoproteasome, the
+   interferon route (IFNG, IFNGR1/2, JAK1, JAK2, STAT1, IRF1/2) and the canonical melanoma
    drivers (BRAF, NRAS, KRAS, HRAS, NF1, MAP2K1/2, RAC1, PPP6C, KIT,
    GNAQ/11, TP53, CDKN2A, CDK4, CCND1, RB1, MDM2, PTEN, PIK3CA, AKT1,
    ARID2, IDH1, STK19, DDX3X, SF3B1, BAP1, EIF1AX, MITF, TERT, CTNNB1).
@@ -173,7 +175,10 @@ columns.
    number from the Sequenza segments covering it (gene coordinates come
    from `--rna_gtf`, with minor copy number 0 reported as LOH), and the
    somatic consequences VEP called in it, with truncating ones marked.
-   `Panel Flag` is `LOSS_OF_FUNCTION` / `ALTERED` / `OK` / `NA`. This is
+   Each gene carries an `Adverse Direction`: most are `loss`, but HLA-E
+   and HLA-G are inhibitory ligands (NKG2A, ILT2/ILT4), so for them gain
+   is the finding and `Panel Flag` reports `INHIBITORY_GAIN`. Otherwise
+   the flag is `LOSS_OF_FUNCTION` / `ALTERED` / `OK` / `NA`. This is
    the step that catches a tumour that cannot present antigen at all
    (B2M or HLA loss, JAK1/JAK2 truncation), which no per-candidate report
    would show. Replace the panel with `--gene_panel`. It is not an
