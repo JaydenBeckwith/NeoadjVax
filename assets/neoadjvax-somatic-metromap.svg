@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1730" viewBox="0 0 1800 1730" role="img" aria-labelledby="title desc">
 <title id="title">NeoadjVax somatic pipeline map</title>
-<desc id="desc">Metro map of the somatic neoantigen pipeline. Tumour and normal DNA (FASTQ or aligned BAM) go through QC, trimming, BWA-MEM, duplicate marking and BQSR, then Mutect2 with orientation and contamination filtering to a PASS somatic VCF. That VCF feeds three lines that meet at pVACseq: VEP, bam-readcount on the DNA and optional baseline and week 6 RNA BAMs, and vcf-readcount-annotator; germline calling around somatic sites and WhatsHap phasing for the proximal-variant VCF; and HLA-HD typing of the normal. Sequenza purity from the samplesheet goes to pVACseq, and ploidy and segment copy number to the CCF table, which also carries the week 6 RNA counts. A separate optional fusion section takes baseline RNA FASTQ through STAR-Fusion, or an existing STAR-Fusion table, then AGFusion and pVACfuse, into the patient report. A final section feeds that melanoma report with RNA support per timepoint from the readcount VCFs and CCF table, and optional expression context from featureCounts TPM with GTEx and TCGA tables and a gene panel. The LaTeX report is compiled to PDF with pdflatex. Dashed lines are optional. Repeated input stations denote the same input, not separate dependencies.</desc>
+<desc id="desc">Metro map of the somatic neoantigen pipeline. Tumour and normal DNA (FASTQ or aligned BAM) go through QC, trimming, BWA-MEM, duplicate marking and BQSR, then Mutect2 with orientation and contamination filtering to a PASS somatic VCF. That VCF feeds three lines that meet at pVACseq: VEP, bam-readcount on the DNA and optional baseline and week 6 RNA BAMs, and vcf-readcount-annotator; germline calling around somatic sites and WhatsHap phasing for the proximal-variant VCF; and HLA-HD typing of the normal. Sequenza purity from the samplesheet goes to pVACseq, and ploidy and segment copy number to the CCF table, which also carries the week 6 RNA counts. A separate optional fusion section takes baseline RNA FASTQ through STAR-Fusion, or an existing STAR-Fusion table, then AGFusion and pVACfuse, into the patient report. The pVACseq and CCF reports also flow directly into that melanoma report, with HLA and clinical values, RNA support per timepoint from the readcount VCFs, and optional expression context from featureCounts TPM with GTEx and TCGA tables and a gene panel. The LaTeX report is compiled to PDF with pdflatex. Dashed lines are optional. Repeated input stations denote the same input, not separate dependencies.</desc>
 <style>
 :root {
   --bg: #ffffff;
@@ -119,7 +119,8 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <text x="1680" y="556" class="label" text-anchor="end">CCF table</text>
 <text x="1662" y="618" class="note" text-anchor="end">copy number + week 6 RNA columns</text>
 <text x="120" y="1008" class="section" text-anchor="start">03  FUSION NEOANTIGENS (OPTIONAL)</text>
-<path d="M120 1090 H1260 Q1320 1090 1320 1150 V1402" class="track optional" stroke="#dc2626"/>
+<path d="M1696 580 H1700 Q1740 580 1740 620 V1200 Q1740 1250 1690 1250 H1395 Q1345 1250 1345 1300 V1402" class="track" stroke="#d97706"/>
+<path d="M120 1090 H1235 Q1295 1090 1295 1150 V1402" class="track optional" stroke="#dc2626"/>
 <path d="M380 1200 H620 Q680 1200 680 1150 V1090" class="track optional" stroke="#dc2626"/>
 <circle cx="120" cy="1090" r="11" class="station"/>
 <text x="120" y="1066" class="label" text-anchor="start">RNA FASTQ</text>
@@ -136,14 +137,15 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <circle cx="380" cy="1200" r="11" class="station"/>
 <text x="380" y="1240" class="label" text-anchor="middle">Existing STAR-Fusion table</text>
 <text x="380" y="1264" class="note" text-anchor="middle">samplesheet starfusion_tsv</text>
-<text x="1338" y="1210" class="note" text-anchor="start">fusion section of the report</text>
+<text x="1313" y="1180" class="note" text-anchor="start">pVACfuse + fusion calls to report</text>
+<text x="1690" y="1236" class="note" text-anchor="end">pVACseq + CCF reports to report</text>
 <path d="M120 1290H1680" class="divider"/>
-<text x="120" y="1338" class="section" text-anchor="start">04  RNA SUPPORT, EXPRESSION AND PATIENT REPORT</text>
+<text x="120" y="1338" class="section" text-anchor="start">04  PATIENT PDF REPORT (ALL RESULTS FEED IN)</text>
 <path d="M120 1420 H1680" class="track report-track"/>
 <path d="M120 1530 H1260 Q1320 1530 1320 1480 V1438" class="track optional" stroke="#0ea5e9"/>
 <circle cx="120" cy="1420" r="11" class="station"/>
-<text x="120" y="1396" class="label" text-anchor="start">Readcounts + CCF</text>
-<text x="120" y="1458" class="note" text-anchor="start">with HLA + clinical</text>
+<text x="120" y="1396" class="label" text-anchor="start">Readcount VCFs</text>
+<text x="120" y="1458" class="note" text-anchor="start">DNA + baseline RNA</text>
 <circle cx="400" cy="1420" r="11" class="station"/>
 <text x="400" y="1396" class="label" text-anchor="middle">Week 6 counts</text>
 <text x="400" y="1458" class="note" text-anchor="middle">separate RNA VCF</text>
@@ -168,6 +170,7 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <rect x="1276" y="1402" width="88" height="36" rx="18" class="station"/>
 <text x="1262" y="1396" class="label" text-anchor="end">Patient report</text>
 <text x="1262" y="1458" class="note" text-anchor="end">melanoma, LaTeX</text>
+<text x="1364" y="1392" class="note" text-anchor="start">+ HLA, purity, ploidy, sex</text>
 <circle cx="1680" cy="1420" r="11" class="station"/>
 <text x="1680" y="1396" class="label" text-anchor="end">PDF report</text>
 <text x="1680" y="1458" class="note" text-anchor="end">pdflatex, unless --report_pdf false</text>
