@@ -4,7 +4,12 @@ Somatic neoantigen prediction for neoadjuvant melanoma vaccine work:
 tumour and matched-normal DNA in, ranked pVACseq candidates out.
 Nextflow DSL2, built to run on NCI Gadi (PBS Pro + Singularity).
 
-[![NeoadjVax somatic pipeline metro map](assets/neoadjvax-somatic-metromap.svg)](assets/neoadjvax-somatic-metromap.svg)
+<a href="assets/neoadjvax-somatic-metromap.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/neoadjvax-somatic-metromap-dark.png">
+    <img src="assets/neoadjvax-somatic-metromap.png" alt="NeoadjVax somatic pipeline metro map">
+  </picture>
+</a>
 
 ```
 tumour + normal DNA (FASTQ, or aligned BAM)

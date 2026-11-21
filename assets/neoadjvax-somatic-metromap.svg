@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1060" viewBox="0 0 1800 1060" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1730" viewBox="0 0 1800 1730" role="img" aria-labelledby="title desc">
 <title id="title">NeoadjVax somatic pipeline map</title>
-<desc id="desc">Metro map of the somatic neoantigen pipeline. Tumour and normal DNA (FASTQ or aligned BAM) go through QC, trimming, BWA-MEM, duplicate marking and BQSR, then Mutect2 with orientation and contamination filtering to a PASS somatic VCF. That VCF feeds three lines that meet at pVACseq: VEP, bam-readcount on the DNA and optional baseline and week 6 RNA BAMs, and vcf-readcount-annotator; germline calling around somatic sites and WhatsHap phasing for the proximal-variant VCF; and HLA-HD typing of the normal. Sequenza purity from the samplesheet goes to pVACseq, and ploidy and segment copy number to the CCF table, which also carries the week 6 RNA counts. Repeated input stations denote the same input, not separate dependencies.</desc>
+<desc id="desc">Metro map of the somatic neoantigen pipeline. Tumour and normal DNA (FASTQ or aligned BAM) go through QC, trimming, BWA-MEM, duplicate marking and BQSR, then Mutect2 with orientation and contamination filtering to a PASS somatic VCF. That VCF feeds three lines that meet at pVACseq: VEP, bam-readcount on the DNA and optional baseline and week 6 RNA BAMs, and vcf-readcount-annotator; germline calling around somatic sites and WhatsHap phasing for the proximal-variant VCF; and HLA-HD typing of the normal. Sequenza purity from the samplesheet goes to pVACseq, and ploidy and segment copy number to the CCF table, which also carries the week 6 RNA counts. A separate optional fusion section takes baseline RNA FASTQ through STAR-Fusion, or an existing STAR-Fusion table, then AGFusion and pVACfuse, into the patient report. The pVACseq and CCF reports also flow directly into that melanoma report, with HLA and clinical values, RNA support per timepoint from the readcount VCFs, and optional expression context from featureCounts TPM with GTEx and TCGA tables and a gene panel. The LaTeX report is compiled to PDF with pdflatex. Dashed lines are optional. Repeated input stations denote the same input, not separate dependencies.</desc>
 <style>
 :root {
   --bg: #ffffff;
@@ -27,11 +27,12 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 .small {font-size:17px;fill:var(--muted)}
 .track {fill:none;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
 .station {fill:var(--bg);stroke:var(--ink);stroke-width:3}
-.pending {stroke-dasharray:10 12}
+.optional {stroke-dasharray:10 12}
+.report-track {stroke:var(--ink)}
 .divider {stroke:var(--divider);stroke-width:1.5}
 </style>
 <text x="120" y="65" class="title" text-anchor="start">NeoadjVax somatic pipeline</text>
-<text x="120" y="101" class="subtitle" text-anchor="start">Nextflow DSL2 / tumour + matched normal DNA to pVACseq neoantigen candidates</text>
+<text x="120" y="101" class="subtitle" text-anchor="start">Nextflow DSL2 / tumour + matched normal DNA to pVACseq and pVACfuse candidates and a patient report</text>
 <text x="1680" y="65" class="small" text-anchor="end">READ LEFT TO RIGHT</text>
 <path d="M120 130H1680" class="divider"/>
 <text x="120" y="170" class="section" text-anchor="start">01  DNA TO SOMATIC CALLS</text>
@@ -73,7 +74,7 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <path d="M120 580 H1680" class="track" stroke="#d97706"/>
 <path d="M120 690 H1180 Q1240 690 1240 630 V580" class="track" stroke="#16a34a"/>
 <path d="M120 800 H1220 Q1280 800 1280 740 V580" class="track" stroke="#7c3aed"/>
-<path d="M120 910 H1620 Q1680 910 1680 850 V580" class="track pending" stroke="#0d9488"/>
+<path d="M120 910 H1620 Q1680 910 1680 850 V580" class="track" stroke="#0d9488"/>
 <circle cx="120" cy="580" r="11" class="station"/>
 <text x="120" y="556" class="label" text-anchor="start">PASS somatic VCF</text>
 <circle cx="400" cy="580" r="11" class="station"/>
@@ -117,16 +118,79 @@ text {font-family:Arial,Helvetica,sans-serif;fill:var(--heading)}
 <circle cx="1680" cy="580" r="11" class="station"/>
 <text x="1680" y="556" class="label" text-anchor="end">CCF table</text>
 <text x="1662" y="618" class="note" text-anchor="end">copy number + week 6 RNA columns</text>
-<path d="M120 1010 H164" class="track" stroke="#64748b"/>
-<text x="176" y="1016" class="small" text-anchor="start">DNA preprocessing</text>
-<path d="M372.4 1010 H416.4" class="track" stroke="#2563eb"/>
-<text x="428.4" y="1016" class="small" text-anchor="start">Somatic calling</text>
-<path d="M606.4 1010 H650.4" class="track" stroke="#d97706"/>
-<text x="662.4" y="1016" class="small" text-anchor="start">Readcounts and pVACseq</text>
-<path d="M904.8 1010 H948.8" class="track" stroke="#16a34a"/>
-<text x="960.8" y="1016" class="small" text-anchor="start">Proximal-variant phasing</text>
-<path d="M1221.6 1010 H1265.6" class="track" stroke="#7c3aed"/>
-<text x="1277.6" y="1016" class="small" text-anchor="start">HLA typing</text>
-<path d="M1409.6 1010 H1453.6" class="track pending" stroke="#0d9488"/>
-<text x="1465.6" y="1016" class="small" text-anchor="start">Sequenza inputs</text>
+<text x="120" y="1008" class="section" text-anchor="start">03  FUSION NEOANTIGENS (OPTIONAL)</text>
+<path d="M1696 580 H1700 Q1740 580 1740 620 V1200 Q1740 1250 1690 1250 H1395 Q1345 1250 1345 1300 V1402" class="track" stroke="#d97706"/>
+<path d="M120 1090 H1235 Q1295 1090 1295 1150 V1402" class="track optional" stroke="#dc2626"/>
+<path d="M380 1200 H620 Q680 1200 680 1150 V1090" class="track optional" stroke="#dc2626"/>
+<circle cx="120" cy="1090" r="11" class="station"/>
+<text x="120" y="1066" class="label" text-anchor="start">RNA FASTQ</text>
+<text x="120" y="1128" class="note" text-anchor="start">baseline tumour</text>
+<circle cx="400" cy="1090" r="11" class="station"/>
+<text x="400" y="1066" class="label" text-anchor="middle">STAR-Fusion</text>
+<text x="400" y="1128" class="note" text-anchor="middle">CTAT genome lib</text>
+<circle cx="680" cy="1090" r="11" class="station"/>
+<text x="680" y="1066" class="label" text-anchor="middle">AGFusion</text>
+<text x="696" y="1128" class="note" text-anchor="start">Ensembl DB, --middlestar --noncanonical</text>
+<circle cx="1150" cy="1090" r="11" class="station"/>
+<text x="1150" y="1066" class="label" text-anchor="middle">pVACfuse</text>
+<text x="1150" y="1128" class="note" text-anchor="middle">same HLA and IEDB as pVACseq</text>
+<circle cx="380" cy="1200" r="11" class="station"/>
+<text x="380" y="1240" class="label" text-anchor="middle">Existing STAR-Fusion table</text>
+<text x="380" y="1264" class="note" text-anchor="middle">samplesheet starfusion_tsv</text>
+<text x="1313" y="1180" class="note" text-anchor="start">pVACfuse + fusion calls to report</text>
+<text x="1690" y="1236" class="note" text-anchor="end">pVACseq + CCF reports to report</text>
+<path d="M120 1290H1680" class="divider"/>
+<text x="120" y="1338" class="section" text-anchor="start">04  PATIENT PDF REPORT (ALL RESULTS FEED IN)</text>
+<path d="M120 1420 H1680" class="track report-track"/>
+<path d="M120 1530 H1260 Q1320 1530 1320 1480 V1438" class="track optional" stroke="#0ea5e9"/>
+<circle cx="120" cy="1420" r="11" class="station"/>
+<text x="120" y="1396" class="label" text-anchor="start">Readcount VCFs</text>
+<text x="120" y="1458" class="note" text-anchor="start">DNA + baseline RNA</text>
+<circle cx="400" cy="1420" r="11" class="station"/>
+<text x="400" y="1396" class="label" text-anchor="middle">Week 6 counts</text>
+<text x="400" y="1458" class="note" text-anchor="middle">separate RNA VCF</text>
+<circle cx="680" cy="1420" r="11" class="station"/>
+<text x="680" y="1396" class="label" text-anchor="middle">RNA support</text>
+<text x="680" y="1458" class="note" text-anchor="middle">patients with RNA, per timepoint</text>
+<circle cx="960" cy="1420" r="11" class="station"/>
+<text x="960" y="1396" class="label" text-anchor="middle">Support figure</text>
+<text x="960" y="1458" class="note" text-anchor="middle">variants + clonal neoantigens</text>
+<circle cx="120" cy="1530" r="11" class="station"/>
+<text x="120" y="1506" class="label" text-anchor="start">RNA BAMs</text>
+<text x="120" y="1568" class="note" text-anchor="start">baseline + week 6</text>
+<circle cx="400" cy="1530" r="11" class="station"/>
+<text x="400" y="1506" class="label" text-anchor="middle">featureCounts</text>
+<text x="400" y="1568" class="note" text-anchor="middle">needs --rna_gtf</text>
+<circle cx="680" cy="1530" r="11" class="station"/>
+<text x="680" y="1506" class="label" text-anchor="middle">Gene TPM</text>
+<text x="680" y="1568" class="note" text-anchor="middle">baseline goes on the report</text>
+<circle cx="960" cy="1530" r="11" class="station"/>
+<text x="960" y="1506" class="label" text-anchor="middle">GTEx + TCGA context</text>
+<text x="960" y="1568" class="note" text-anchor="middle">expression flag + gene panel</text>
+<rect x="1276" y="1402" width="88" height="36" rx="18" class="station"/>
+<text x="1262" y="1396" class="label" text-anchor="end">Patient report</text>
+<text x="1262" y="1458" class="note" text-anchor="end">melanoma, LaTeX</text>
+<text x="1364" y="1392" class="note" text-anchor="start">+ HLA, purity, ploidy, sex</text>
+<circle cx="1680" cy="1420" r="11" class="station"/>
+<text x="1680" y="1396" class="label" text-anchor="end">PDF report</text>
+<text x="1680" y="1458" class="note" text-anchor="end">pdflatex, unless --report_pdf false</text>
+<path d="M120 1610H1680" class="divider"/>
+<path d="M120 1650 H164" class="track" stroke="#64748b"/>
+<text x="176" y="1656" class="small" text-anchor="start">DNA preprocessing</text>
+<path d="M372.4 1650 H416.4" class="track" stroke="#2563eb"/>
+<text x="428.4" y="1656" class="small" text-anchor="start">Somatic calling</text>
+<path d="M606.4 1650 H650.4" class="track" stroke="#d97706"/>
+<text x="662.4" y="1656" class="small" text-anchor="start">Readcounts and pVACseq</text>
+<path d="M904.8 1650 H948.8" class="track" stroke="#16a34a"/>
+<text x="960.8" y="1656" class="small" text-anchor="start">Proximal-variant phasing</text>
+<path d="M1221.6 1650 H1265.6" class="track" stroke="#7c3aed"/>
+<text x="1277.6" y="1656" class="small" text-anchor="start">HLA typing</text>
+<path d="M1409.6 1650 H1453.6" class="track" stroke="#0d9488"/>
+<text x="1465.6" y="1656" class="small" text-anchor="start">Sequenza inputs</text>
+<path d="M120 1692 H164" class="track report-track"/>
+<text x="176" y="1698" class="small" text-anchor="start">RNA support and report</text>
+<path d="M428.4 1692 H472.4" class="track optional" stroke="#0ea5e9"/>
+<text x="484.4" y="1698" class="small" text-anchor="start">Expression (optional: --gtex_db or --tcga_db)</text>
+<path d="M904.8 1692 H948.8" class="track optional" stroke="#dc2626"/>
+<text x="960.8" y="1698" class="small" text-anchor="start">Fusion (optional: --fusion true)</text>
 </svg>
