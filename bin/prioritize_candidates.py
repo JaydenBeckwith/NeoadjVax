@@ -47,6 +47,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import agretopicity as agretopicity_script  # noqa: E402  (same directory, on PATH in the pipeline)
+
 NEW_COLUMNS = ["Agretopicity", "DAI", "HLA LOH", "Flags", "Reject Reason", "Selection", "Priority Rank"]
 
 # Flags that disqualify a candidate, in the order they are reported. The
@@ -136,11 +139,12 @@ def loh_status(allele, calls):
 
 
 def agretopicity(row):
-    """(ratio, DAI) from the MT/WT IC50 pair, or (None, None)."""
-    mt, wt = number(row.get("IC50 MT")), number(row.get("IC50 WT"))
-    if mt is None or wt is None or wt <= 0:
-        return None, None
-    return mt / wt, wt - mt
+    """(ratio, DAI) from the MT/WT IC50 pair, or (None, None).
+
+    One definition, shared with bin/agretopicity.py, which computes the
+    same thing on its own for a report that never goes through here.
+    """
+    return agretopicity_script.agretopicity(number(row.get("IC50 MT")), number(row.get("IC50 WT")))
 
 
 def flag_row(row, loh_calls, args):

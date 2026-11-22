@@ -21,6 +21,56 @@ read back and argued with.
 | `Agretopicity` | `IC50 MT / IC50 WT`. Below 1 the mutant binds better than the wild type, so the mutation is what creates the epitope and the T-cell repertoire against it is less likely to have been tolerised. Near or above 1 the wild-type peptide is presented by normal cells too. |
 | `DAI` | `IC50 WT − IC50 MT`: the same comparison as a difference, which is steadier than the ratio when both peptides are weak binders. |
 
+## Running the two calculations on their own
+
+Agretopicity and cancer cell fraction each have a script that runs
+outside the pipeline, against pVACtools output as it comes. Useful for
+checking a finished run, for trying a different threshold without
+rerunning anything, and because each is then testable on its own.
+
+Point either at a single aggregated report or at a whole `pvacseq/` or
+`pvacfuse/` directory; a directory gives one output file per MHC class.
+Both take RNA timepoints with `--timepoint LABEL=VCF`, repeated, so the
+baseline and week 6 columns land in the same table.
+
+```bash
+# agretopicity for every class, from the pVACseq output directory
+python bin/agretopicity.py results/P1/pvacseq --outdir P1_agretopicity/
+
+# one report, with both RNA timepoints joined on
+python bin/agretopicity.py results/P1/pvacseq/combined/tumor.Combined.all_epitopes.aggregated.tsv     -o P1.agretopicity.tsv     --timepoint "Baseline=results/P1/pvacseq_input/P1.somatic.vep.readcounts.vcf.gz"     --timepoint "Week 6=results/P1/pvacseq_input/P1.rna_week6.readcounts.vcf"
+
+# cancer cell fraction, same shape
+python bin/annotate_ccf.py results/P1/pvacseq --purity 0.62 --ploidy 3.1     --sex female --segments P1_segments.txt --outdir P1_ccf/
+```
+
+They chain, so running one over the other's output gives a table with
+both, which `patient_report.py` takes directly:
+
+```bash
+python bin/agretopicity.py results/P1/pvacseq --outdir P1_agr/
+python bin/annotate_ccf.py P1_agr/tumor.Combined.all_epitopes.aggregated.agretopicity.tsv     --purity 0.62 -o P1.Combined.annotated.tsv
+python bin/patient_report.py --patient P1 --purity 0.62 --callable-mb 35     --class-i P1.Combined.annotated.tsv -o P1.report.tex
+```
+
+### What pVACfuse cannot give you
+
+Both scripts read pVACfuse output, and both decline a calculation there,
+for reasons that are about the biology rather than a missing column:
+
+- **Agretopicity does not apply.** A fusion junction peptide has no
+  wild-type counterpart anywhere in the germline, so there is nothing to
+  divide by. The class comes out as `not_applicable`.
+- **CCF does not apply.** Fusions are called from RNA and pVACfuse
+  reports no DNA VAF, so there is no allele fraction to correct for
+  purity and copy number. `CN Source` comes out as `not_applicable`.
+
+Both say so on stderr and still write the table, so the rest of the
+columns pass through. Neither fills the field with `NA`, which would read
+like a calculation that failed rather than one that does not apply. For
+fusions, the columns that carry the evidence are pVACfuse's own
+`Read Support` and `Expr`.
+
 ## Flags
 
 A **rejection** means the candidate should not go into a vaccine. A
