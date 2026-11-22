@@ -30,6 +30,7 @@ include { FUSION            } from './workflows/fusion'
 include { REPORT            } from './workflows/report'
 include { PRIORITIZE } from './modules/local/pvactools/prioritize'
 include { GENERATE_PROTEIN_FASTA; DESIGN_LONG_PEPTIDES; PVACVECTOR } from './modules/local/pvactools/long_peptides'
+include { WORKBOOK } from './modules/local/report/workbook'
 include { SAMTOOLS_FAIDX; CREATE_SEQUENCE_DICTIONARY; BWA_INDEX } from './modules/local/reference/prepare_genome'
 
 // ---------------------------------------------------------------------
@@ -270,6 +271,19 @@ workflow {
                 }
                 .join(HLA_TYPING.out.alleles))
         }
+    }
+
+    // One spreadsheet per patient, from whatever the run produced. Each
+    // optional table joins with remainder: true and arrives as [] when
+    // the patient has none, so a DNA-only patient still gets a workbook.
+    if (params.workbook) {
+        workbook_in_ch = PRIORITIZE.out.tsv
+            .join(long_peptides_ch, remainder: true)
+            .join(HLA_TYPING.out.loh, remainder: true)
+            .join(panel_ch, remainder: true)
+            .filter { it[1] != null }
+            .map { row -> row[0..0] + row[1..-1].collect { it == null ? [] : it } }
+        WORKBOOK(workbook_in_ch)
     }
 
     // Fusion neoantigens are opt-in and need RNA reads (or an existing
