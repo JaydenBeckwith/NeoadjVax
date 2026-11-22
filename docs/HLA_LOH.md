@@ -25,6 +25,11 @@ The column is optional per patient. A patient without one gets `NA` in the
 `HLA LOH` column and no flag, which is different from being told the
 alleles are retained.
 
+`cal.hla.copy.pl` writes twelve columns (`Sample`, `HLA`, `Allele1`,
+`Allele2`, `copyratio`, `KeptHLA`, `LossHLA`, `Freq1`, `Freq2`, `Purity`,
+`Het_num`, `LOH`). The `SampleDir`, `Homozygous` and `Class` columns in
+our collated sheets are added afterwards by us; both shapes parse.
+
 The long collated tables the cohort analysis produces
 (`HLA_LOH_per_locus_all_cohorts.csv` and friends) are read too — tab,
 comma and semicolon separated files all work, and `--patient` matches

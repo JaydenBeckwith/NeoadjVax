@@ -137,6 +137,62 @@ class TestPurityFilter(unittest.TestCase):
         self.assertEqual(table["C"]["call"], "loss")
 
 
+class TestVendorExample(unittest.TestCase):
+    """The merge.hla.copy.txt table from SpecHLA's own documentation.
+
+    Twelve columns, with no SampleDir/Homozygous/Class: those three come
+    from our collation, not from cal.hla.copy.pl, so the vendor shape has
+    to parse on its own.
+
+    The trap in it is DPA1 and DQB1: `copyratio` is 2:0 on a homozygous
+    locus, so reading the zero side alone would invent four losses in a
+    sample that has none.
+    """
+
+    HEADER = ["Sample", "HLA", "Allele1", "Allele2", "copyratio", "KeptHLA", "LossHLA",
+              "Freq1", "Freq2", "Purity", "Het_num", "LOH"]
+    ROWS = [
+        ["test", "A", "A*24:02:01:01", "A*02:01:01:01", "1:1", "A*24:02:01:01", "A*02:01:01:01", "0.507", "0.493", "0.5", "100", "N"],
+        ["test", "B", "B*07:02:01:01", "B*40:01:02:01", "1:1", "B*07:02:01:01", "B*40:01:02:01", "0.502", "0.498", "0.5", "32", "N"],
+        ["test", "C", "C*03:04:01:01", "C*07:02:01:03", "1:1", "C*07:02:01:03", "C*03:04:01:01", "0.433", "0.567", "0.5", "99", "N"],
+        ["test", "DPA1", "DPA1*01:03:01:02", "DPA1*01:03:01:02", "2:0", "DPA1*01:03:01:02", "homogeneous", "1", "0", "0.5", "0", "N"],
+        ["test", "DPB1", "DPB1*04:01:01:01", "DPB1*04:01:01:01", "2:0", "DPB1*04:01:01:01", "DPB1*04:01:01:01", "0.909", "0.091", "0.5", "1", "N"],
+        ["test", "DQA1", "DQA1*01:02:01:01", "DQA1*01:02:01:01", "1:1", "DQA1*01:02:01:01", "DQA1*01:02:01:01", "0.548", "0.452", "0.5", "1", "N"],
+        ["test", "DQB1", "DQB1*06:02:01:01", "DQB1*06:02:01:01", "2:0", "DQB1*06:02:01:01", "homogeneous", "1", "0", "0.5", "0", "N"],
+        ["test", "DRB1", "DRB1*15:01:01:01", "DRB1*15:01:01:01", "2:0", "DRB1*15:01:01:01", "DRB1*15:01:01:01", "0.65", "0.35", "0.5", "2", "N"],
+    ]
+
+    def setUp(self):
+        path = write_loh(self.ROWS, header=self.HEADER)
+        out = path.parent / "out.tsv"
+        parse_hla_loh.main([str(path), "--patient", "test", "-o", str(out)])
+        with out.open(newline="") as handle:
+            self.table = {row["locus"]: row for row in csv.DictReader(handle, delimiter="\t")}
+
+    def test_all_eight_loci_are_read(self):
+        self.assertEqual(set(self.table), {"A", "B", "C", "DPA1", "DPB1", "DQA1", "DQB1", "DRB1"})
+
+    def test_the_three_heterozygous_loci_are_evaluable_and_retained(self):
+        for locus in ("A", "B", "C"):
+            self.assertEqual(self.table[locus]["call"], "retained", locus)
+
+    def test_a_homozygous_locus_at_two_zero_copies_is_not_a_loss(self):
+        for locus in ("DPA1", "DQB1"):
+            self.assertEqual(self.table[locus]["call"], "not_evaluable", locus)
+            self.assertEqual(self.table[locus]["lost_allele_pvacseq"], "")
+
+    def test_no_locus_in_this_sample_is_called_lost(self):
+        self.assertEqual([r["locus"] for r in self.table.values() if r["call"] == "loss"], [])
+
+    def test_alleles_are_renamed_for_pvacseq(self):
+        self.assertEqual(self.table["A"]["allele1_pvacseq"], "HLA-A*24:02")
+        self.assertEqual(self.table["DRB1"]["allele1_pvacseq"], "DRB1*15:01")
+
+    def test_class_i_and_ii_are_split(self):
+        self.assertEqual(self.table["C"]["hla_class"], "I")
+        self.assertEqual(self.table["DPB1"]["hla_class"], "II")
+
+
 class TestInputShapes(unittest.TestCase):
     def test_long_collated_csv(self):
         header = ["cohort", "sample_id", "locus", "allele1", "allele2", "copyratio",
