@@ -188,6 +188,142 @@ class Report(unittest.TestCase):
         self.assertIn("RNA support was not assessed", text)
         self.assertIn("fusion branch did not run", text)
         self.assertIn("Allele-specific HLA LOH was not assessed", text)
+
+
+class HlaLohSection(unittest.TestCase):
+    """A SpecHLA table turns the HLA section from a caveat into calls."""
+
+    LOH_ROWS = [
+        ["patient", "locus", "hla_class", "allele1_pvacseq", "allele2_pvacseq", "call", "lost_allele_pvacseq"],
+        ["P1", "A", "I", "HLA-A*02:01", "HLA-A*01:01", "loss", "HLA-A*02:01"],
+        ["P1", "B", "I", "HLA-B*07:02", "HLA-B*08:01", "retained", ""],
+        ["P1", "DRB1", "II", "DRB1*15:01", "DRB1*15:01", "not_evaluable", ""],
+    ]
+
+    def render(self, *extra):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "x.vcf").write_text(vcf(record("chr1", 3, "C", "T", "missense_variant", "BRAF", "p.Val600Glu")))
+            rows = ["\t".join(row) for row in self.LOH_ROWS]
+            (tmp / "loh.tsv").write_text("\n".join(rows) + "\n")
+            out = tmp / "r.tex"
+            pr.main(["--patient", "P1", "--vcf", str(tmp / "x.vcf"), "--purity", "0.6",
+                     "--callable-mb", "10", "--hla-loh", str(tmp / "loh.tsv"),
+                     "-o", str(out)] + list(extra))
+            return out.read_text()
+
+    def test_the_caveat_is_replaced_by_the_calls(self):
+        text = self.render()
+        self.assertNotIn("Allele-specific HLA LOH was not assessed", text)
+        self.assertIn("Allele-specific HLA copy number (SpecHLA)", text)
+
+    def test_the_lost_locus_is_named(self):
+        text = self.render()
+        self.assertIn("Lost: A.", text)
+
+    def test_a_locus_that_could_not_be_called_is_named_too(self):
+        self.assertIn("Not evaluable: DRB1.", self.render())
+
+    def test_loh_leaves_the_not_assessed_list(self):
+        text = self.render()
+        self.assertNotIn("no SpecHLA result was given", text)
+
+    def test_without_a_table_it_is_still_listed_as_not_assessed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "x.vcf").write_text(vcf(record("chr1", 3, "C", "T", "missense_variant", "BRAF", "p.Val600Glu")))
+            out = tmp / "r.tex"
+            pr.main(["--patient", "P1", "--vcf", str(tmp / "x.vcf"), "--purity", "0.6",
+                     "--callable-mb", "10", "-o", str(out)])
+            text = out.read_text()
+        self.assertIn("no SpecHLA result was given", text)
+
+
+class EmbeddedFigures(unittest.TestCase):
+    """Figures are drawn elsewhere and arrive as files to embed."""
+
+    def render(self, *extra):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "x.vcf").write_text(vcf(record("chr1", 3, "C", "T", "missense_variant", "BRAF", "p.Val600Glu")))
+            for name in ("cand.pdf", "flags.pdf", "loh.pdf"):
+                (tmp / name).write_bytes(b"%PDF-1.4 stub")
+            out = tmp / "r.tex"
+            pr.main(["--patient", "P1", "--vcf", str(tmp / "x.vcf"), "--purity", "0.6",
+                     "--callable-mb", "10", "-o", str(out)] +
+                    [a.replace("TMP", str(tmp)) for a in extra])
+            return out.read_text()
+
+    def test_candidate_and_flag_figures_are_embedded(self):
+        text = self.render("--candidate-figure", "TMP/cand.pdf", "--flag-figure", "TMP/flags.pdf")
+        self.assertIn(r"\includegraphics[width=\textwidth]{cand.pdf}", text)
+        self.assertIn(r"includegraphics[width=0.9\textwidth]{flags.pdf}", text)
+
+    def test_only_the_basename_is_referenced(self):
+        # pdflatex resolves against its working directory, where Nextflow
+        # stages the figure, so a full path here would not compile.
+        text = self.render("--candidate-figure", "TMP/cand.pdf")
+        self.assertNotIn("TMP/cand.pdf", text)
+
+    def test_no_figure_means_no_includegraphics(self):
+        text = self.render()
+        self.assertNotIn("includegraphics", text)
+
+    def test_figure_captions_explain_what_is_shown(self):
+        text = self.render("--candidate-figure", "TMP/cand.pdf")
+        self.assertIn("Candidate landscape", text)
+
+
+class ReportWithoutSomatic(unittest.TestCase):
+    """--run markers: no somatic calling, so no VCF reaches the report.
+
+    The sections built from variants have to say they were not assessed.
+    Reporting zero variants and a TMB of 0 would read as a tumour with no
+    mutations, which is a different and wrong claim.
+    """
+
+    def render(self, *extra):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            out = tmp / "r.tex"
+            pr.main(["--patient", "P1", "--purity", "0.6", "--callable-mb", "10",
+                     "-o", str(out)] + list(extra))
+            return out.read_text()
+
+    def test_it_still_renders_a_document(self):
+        text = self.render()
+        self.assertIn(r"\begin{document}", text)
+        self.assertIn(r"\end{document}", text)
+
+    def test_the_variant_section_says_it_was_not_assessed(self):
+        text = self.render()
+        self.assertIn("Somatic calling was not part of this run", text)
+
+    def test_no_tmb_is_reported(self):
+        text = self.render()
+        self.assertNotIn("TMB-high", text)
+        self.assertNotIn("mut/Mb over all PASS variants", text)
+
+    def test_variant_counts_are_not_reported_as_zero(self):
+        text = self.render()
+        self.assertIn("NA (somatic calling not run)", text)
+        self.assertNotIn("PASS somatic variants by class", text)
+
+    def test_the_gene_panel_still_renders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            panel = tmp / "panel.tsv"
+            panel.write_text("Pathway\tGene\tSample TPM\tPanel Flag\tCN Call\n"
+                             "antigen_presentation\tB2M\t12\tOK\tNEUTRAL\n")
+            out = tmp / "r.tex"
+            pr.main(["--patient", "P1", "--purity", "0.6", "--callable-mb", "10",
+                     "--gene-panel", str(panel), "-o", str(out)])
+            text = out.read_text()
+        self.assertIn("B2M", text)
+
+    def test_hla_alleles_still_render(self):
+        text = self.render("--hla", "HLA-A*02:01,HLA-B*07:02")
+        self.assertIn("A*02:01", text)
         self.assertIn("Research use only", text)
         self.assertTrue(text.rstrip().endswith(r"\end{document}"))
 

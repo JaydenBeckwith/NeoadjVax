@@ -1,0 +1,53 @@
+# Shared tumour antigens worth checking in a melanoma patient, as a
+# second channel alongside the patient's own mutations. One row per gene:
+#
+#   gene <TAB> class <TAB> note
+#
+# "class" groups the rows in the report; it carries no scoring. These are
+# genes, not epitopes: whether a given patient can present anything from
+# one depends on their alleles, which is why a peptide set for pVACbind
+# (--taa_peptides) is the other half of this channel.
+#
+# Replace this file with your own via --taa_panel. Lines starting with #
+# and blank lines are ignored.
+#
+# Cancer-testis antigens: silent in adult tissue outside testis, which is
+# immune-privileged, so expression in the tumour makes a clean target.
+MAGEA1	cancer_testis	MAGE-A1
+MAGEA3	cancer_testis	MAGE-A3; shares epitopes with MAGEA6
+MAGEA4	cancer_testis	MAGE-A4
+MAGEA6	cancer_testis	MAGE-A6; shares epitopes with MAGEA3
+MAGEA10	cancer_testis	MAGE-A10
+MAGEA12	cancer_testis	MAGE-A12
+MAGEB2	cancer_testis	MAGE-B2
+MAGEC1	cancer_testis	MAGE-C1
+MAGEC2	cancer_testis	MAGE-C2
+CTAG1B	cancer_testis	NY-ESO-1
+CTAG2	cancer_testis	LAGE-1
+PRAME	cancer_testis	PRAME; also expressed in some normal tissue at low level
+BAGE	cancer_testis	BAGE
+GAGE1	cancer_testis	GAGE-1
+GAGE2A	cancer_testis	GAGE-2
+GAGE12H	cancer_testis	GAGE-12
+SSX1	cancer_testis	SSX-1
+SSX2	cancer_testis	SSX-2 (HOM-MEL-40)
+SSX4	cancer_testis	SSX-4
+XAGE1B	cancer_testis	XAGE-1b (GAGED2a)
+SPANXB1	cancer_testis	SPANX-B1
+# Melanocyte differentiation antigens: expressed by normal melanocytes as
+# well, so a response can cause vitiligo and uveitis. Kept in because they
+# are reliably expressed and have well-characterised epitopes, but the
+# normal-tissue column is the one to read for these.
+MLANA	melanocyte_differentiation	Melan-A / MART-1
+PMEL	melanocyte_differentiation	gp100 / PMEL17
+TYR	melanocyte_differentiation	Tyrosinase
+TYRP1	melanocyte_differentiation	TRP-1 / gp75
+DCT	melanocyte_differentiation	TRP-2 / dopachrome tautomerase
+SOX10	melanocyte_differentiation	SOX10; lineage transcription factor
+# Overexpressed in many tumours rather than tumour-specific: the normal
+# expression column decides whether they are usable in a given patient.
+BIRC5	overexpressed	Survivin
+TERT	overexpressed	Telomerase reverse transcriptase
+WT1	overexpressed	WT1
+MUC1	overexpressed	MUC1
+CSPG4	overexpressed	CSPG4 / HMW-MAA / MCSP

@@ -16,6 +16,7 @@ naming the patient and column if something is missing or malformed.
 | `ploidy` | no | Sequenza ploidy. Used as the tumour copy number for CCF when no segments file is given, or for variants outside every segment. |
 | `sequenza_segments` | no | Path to the Sequenza `<sample>_segments.txt`. Gives local copy number (CNt, A, B) per variant for CCF. |
 | `sex` | no | `male` or `female`. Only affects CCF on chrX/chrY (normal copy number 1 in males). |
+| `hla_loh` | no | Path to this patient's SpecHLA `merge.hla.copy.txt` (the `cal.hla.copy.pl` output, run outside this pipeline on the Sequenza purity and ploidy). Candidates on a lost allele are flagged `HLA_LOST` and rejected. A collated per-cohort table works too. See [`docs/HLA_LOH.md`](../docs/HLA_LOH.md). |
 | `hla_alleles` | no | Skip HLA-HD for this patient and use these alleles. Separate with `\|` or `;` (a comma would split the CSV column). Use pVACseq names, e.g. `HLA-A*02:01\|HLA-B*07:02\|DRB1*15:01\|DQA1*01:02-DQB1*06:02`. |
 
 Give each sample either a FASTQ pair or a BAM, not both. A row can mix
@@ -32,7 +33,7 @@ is no expression quantification, so pVACseq's gene/transcript expression
 columns stay NA.
 
 ```csv
-patient_id,tumor_r1,tumor_r2,normal_r1,normal_r2,tumor_bam,normal_bam,rna_baseline_bam,rna_week6_bam,purity,ploidy,sequenza_segments,sex,hla_alleles
-NeoTrio_003,/data/003_T_R1.fq.gz,/data/003_T_R2.fq.gz,/data/003_N_R1.fq.gz,/data/003_N_R2.fq.gz,,,/data/rna/003_baseline.bam,/data/rna/003_wk6.bam,0.62,3.1,/data/sequenza/003/003_segments.txt,female,
-NeoTrio_004,,,,,/data/004_T.bam,/data/004_N.bam,,,0.41,2.0,,male,HLA-A*01:01|HLA-A*03:01|HLA-B*08:01|HLA-B*07:02|HLA-C*07:01|HLA-C*07:02
+patient_id,tumor_r1,tumor_r2,normal_r1,normal_r2,tumor_bam,normal_bam,rna_baseline_bam,rna_week6_bam,purity,ploidy,sequenza_segments,sex,hla_loh,hla_alleles
+NeoTrio_003,/data/003_T_R1.fq.gz,/data/003_T_R2.fq.gz,/data/003_N_R1.fq.gz,/data/003_N_R2.fq.gz,,,/data/rna/003_baseline.bam,/data/rna/003_wk6.bam,0.62,3.1,/data/sequenza/003/003_segments.txt,female,/data/spechla/loh/003/merge.hla.copy.txt,
+NeoTrio_004,,,,,/data/004_T.bam,/data/004_N.bam,,,0.41,2.0,,male,,HLA-A*01:01|HLA-A*03:01|HLA-B*08:01|HLA-B*07:02|HLA-C*07:01|HLA-C*07:02
 ```

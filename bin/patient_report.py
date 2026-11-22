@@ -118,6 +118,19 @@ def not_available(what):
     return rf"\emph{{{tex(what)}}}" + "\n\n"
 
 
+def figure_block(path, caption, width=r"\textwidth"):
+    """Embed a figure drawn elsewhere (bin/report_figures.py, rna_support.py).
+
+    This report draws nothing itself: every plot is made by a script that
+    can be run and checked on its own, and arrives here as a file.
+    """
+    if not path:
+        return ""
+    return (r"\begin{figure}[H]\centering" + "\n" +
+            rf"\includegraphics[width={width}]{{{Path(path).name}}}" + "\n" +
+            rf"\caption{{{caption}}}" + "\n" + r"\end{figure}" + "\n")
+
+
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
@@ -441,7 +454,12 @@ PREAMBLE = r"""\documentclass[10pt]{article}
 
 
 def build_report(args):
-    variants = [v for v in rs.read_vcf(args.vcf) if v["filter"] in ("PASS", ".")]
+    # --vcf is absent when the run did not include somatic calling (see
+    # --run in docs/RUNNING.md). Everything derived from variants is then
+    # reported as not assessed rather than as zero, which would read as a
+    # tumour with no mutations.
+    somatic_assessed = args.vcf is not None
+    variants = [v for v in rs.read_vcf(args.vcf) if v["filter"] in ("PASS", ".")] if somatic_assessed else []
     segments = annotate_ccf.read_segments(args.segments) if args.segments else None
     ccfs = {}
     for v in variants:
@@ -449,12 +467,12 @@ def build_report(args):
             v["dna_vaf"], v["chrom"], v["pos"], args.purity, args.ploidy, args.sex, segments)[-1])
     non_syn = [v for v in variants if rs.is_non_synonymous(v["csq"])]
     fasta = Fasta(args.fasta, args.fai) if args.fasta else None
-    uv = uv_signature(variants, fasta)
+    uv = uv_signature(variants, fasta) if somatic_assessed else None
     if fasta:
         fasta.close()
     size_mb, size_basis = callable_mb(args)
-    tmb = len(variants) / size_mb if size_mb else None
-    tmb_ns = len(non_syn) / size_mb if size_mb else None
+    tmb = len(variants) / size_mb if (size_mb and somatic_assessed) else None
+    tmb_ns = len(non_syn) / size_mb if (size_mb and somatic_assessed) else None
 
     panel_rows = read_tsv(args.gene_panel)
     panel_by_gene = {r["Gene"]: r for r in panel_rows}
@@ -467,6 +485,7 @@ def build_report(args):
     class_i_rows = read_tsv(args.class_i)
     class_ii_rows = read_tsv(args.class_ii)
     rna_summary = read_tsv(args.rna_support_summary)
+    loh_rows = read_tsv(args.hla_loh)
     fusion_status, fusion_reports = read_pvacfuse(args.pvacfuse_dir)
     timepoints = args.timepoint_label or []
 
@@ -498,11 +517,13 @@ def build_report(args):
         ("Sex", tex(args.sex or "NA")),
         ("Genomic subtype (TCGA SKCM)", rf"\textbf{{{tex(subtype)}}}"),
         ("BRAF status", tex(braf_status)),
-        ("PASS somatic variants / non-synonymous", f"{len(variants)} / {len(non_syn)}"),
+        ("PASS somatic variants / non-synonymous",
+         f"{len(variants)} / {len(non_syn)}" if somatic_assessed else "NA (somatic calling not run)"),
         ("TMB (all PASS, mut/Mb)", (rf"\textbf{{{num(tmb)}}}" + (r" \textcolor{FAIL}{TMB-high}" if tmb >= TMB_HIGH else ""))
          if tmb is not None else "NA"),
         ("Clonal non-synonymous (CCF $\\geq$ " + f"{args.clonal_ccf:g})", f"{clonal_ns} of {len(ns_ccf)}" if ns_ccf else "NA"),
-        ("UV signature (C>T of SNVs)", f"{100 * uv['ct_fraction']:.0f}\\%" if uv["ct_fraction"] is not None else "NA"),
+        ("UV signature (C>T of SNVs)",
+         f"{100 * uv['ct_fraction']:.0f}\\%" if uv and uv["ct_fraction"] is not None else "NA"),
         ("HLA class I alleles", tex(", ".join(class_i) or "NA")),
         ("Gene-level HLA / B2M copy loss or LOH", tex(", ".join(hla_loh_genes) if hla_loh_genes else
                                                       ("none" if panel_rows else "NA (no gene panel)"))),
@@ -571,10 +592,28 @@ def build_report(args):
                            tex(panel_by_gene[g].get("Mutations")), flag_colour(panel_by_gene[g].get("Panel Flag"))]
                           for g in hla_genes], spec="lrrllll", size=r"\footnotesize",
                          caption="Gene-level copy number and expression at the class I loci and B2M"))
-    out.append(r"\textbf{Allele-specific HLA LOH was not assessed.} The rows above are gene-level copy number "
-               r"from Sequenza segments; short reads mismap across HLA alleles, so a minor copy number of 0 here "
-               r"is a prompt to run an allele-specific caller (LOHHLA, SpecHLA, DASH), not a call. Candidates "
-               r"restricted to a lost allele would not be presented." + "\n")
+    if loh_rows:
+        out.append(table(["Locus", "Call", "Allele 1", "Allele 2", "Lost allele"],
+                         [[tex(r.get("locus")), tex(r.get("call")),
+                           tex(r.get("allele1_pvacseq") or r.get("allele1")),
+                           tex(r.get("allele2_pvacseq") or r.get("allele2")),
+                           tex(r.get("lost_allele_pvacseq") or "-")] for r in loh_rows],
+                         spec="lllll", size=r"\footnotesize",
+                         caption="Allele-specific HLA copy number (SpecHLA)"))
+        out.append(figure_block(args.hla_loh_figure, "HLA loss of heterozygosity per locus. A candidate "
+                                "restricted to a lost allele cannot be presented, whatever else is true of it."))
+        lost_loci = [r.get("locus") for r in loh_rows if (r.get("call") or "") == "loss"]
+        not_evaluable = [r.get("locus") for r in loh_rows if (r.get("call") or "") in ("not_evaluable", "low_purity")]
+        out.append(rf"Allele-specific HLA LOH from SpecHLA, read in with the run. "
+                   rf"{'Lost: ' + tex(', '.join(lost_loci)) + '. ' if lost_loci else 'No locus lost. '}"
+                   rf"{'Not evaluable: ' + tex(', '.join(not_evaluable)) + '. ' if not_evaluable else ''}"
+                   r"Candidates restricted to a lost allele are flagged HLA\_LOST and rejected; a locus that "
+                   r"could not be evaluated gives a caution rather than a pass." + "\n")
+    else:
+        out.append(r"\textbf{Allele-specific HLA LOH was not assessed.} The rows above are gene-level copy number "
+                   r"from Sequenza segments; short reads mismap across HLA alleles, so a minor copy number of 0 here "
+                   r"is a prompt to run an allele-specific caller (LOHHLA, SpecHLA, DASH), not a call. Candidates "
+                   r"restricted to a lost allele would not be presented." + "\n")
 
     # 4. APM panel ------------------------------------------------------------
     out.append(r"\section{Antigen presentation machinery and interferon signalling}")
@@ -603,39 +642,44 @@ def build_report(args):
 
     # 5. Variants, TMB, clonality --------------------------------------------
     out.append(r"\section{Somatic variants, mutational burden and clonality}")
-    classes = {}
-    for v in variants:
-        classes[variant_class(v)] = classes.get(variant_class(v), 0) + 1
-    consequences = {}
-    for v in variants:
-        c = ((v["csq"] or {}).get("Consequence") or "no_annotation").split("&")[0]
-        consequences[c] = consequences.get(c, 0) + 1
-    out.append(table(["Variant class", "n", "%"],
-                     [[tex(k), str(n), f"{100 * n / len(variants):.1f}"] for k, n in sorted(classes.items())] or [["none", "0", "-"]],
-                     spec="lrr", caption="PASS somatic variants by class"))
-    top_consequences = sorted(consequences.items(), key=lambda kv: -kv[1])[:12]
-    out.append(table(["Consequence (canonical transcript)", "n"], [[tex(k), str(n)] for k, n in top_consequences] or [["none", "0"]],
-                     spec="lr", size=r"\small", caption="Most frequent consequences"))
-    tmb_line = (f"TMB is {num(tmb)} mut/Mb over all PASS variants and {num(tmb_ns)} non-synonymous mut/Mb, "
-                f"over {num(size_mb, 1)} Mb ({tex(size_basis)}). ") if tmb is not None else \
-        f"TMB not computed: {tex(size_basis)}. "
-    out.append(tmb_line + f"The usual TMB-high line is {TMB_HIGH:g} mut/Mb; panel and exome TMB differ, so "
-               "compare within one assay.\n")
-    uv_bits = [f"{uv['ct']} of {uv['snvs']} SNVs are C>T"]
-    if uv["dipyrimidine_fraction"] is not None:
-        uv_bits.append(f"{100 * uv['dipyrimidine_fraction']:.0f}\\% of those at a dipyrimidine")
-    uv_bits.append(f"{uv['cc_tt']} CC>TT doublets")
-    out.append("UV signature: " + ", ".join(uv_bits) + ". A dominant C>T share at dipyrimidines with CC>TT "
-               "doublets marks a UV-driven (cutaneous) melanoma; acral and mucosal melanomas lack it and carry "
-               "fewer mutations.\n")
-    if ns_ccf:
-        out.append(rf"Cancer cell fraction of the non-synonymous variants (purity {num(args.purity)}, "
-                   rf"ploidy {num(args.ploidy) if args.ploidy else 'NA'}, "
-                   rf"{'Sequenza segments' if segments else 'no segments'}): {clonal_ns} of {len(ns_ccf)} clonal "
-                   rf"at CCF $\geq$ {args.clonal_ccf:g}. Point estimates without confidence intervals." + "\n")
-        out.append(table(["CCF", "n", ""], [[a, str(b), c] for a, b, c in
-                                           histogram_rows(ns_ccf, [0, 0.2, 0.4, 0.6, 0.8, 1.0])],
-                         spec="lrl", size=r"\small", caption="CCF distribution, non-synonymous variants"))
+    if not somatic_assessed:
+        out.append(not_available(
+            "Somatic calling was not part of this run, so variant counts, TMB, the UV signature and "
+            "clonality were not assessed. Rerun including the somatic analysis to fill this section."))
+    else:
+        classes = {}
+        for v in variants:
+            classes[variant_class(v)] = classes.get(variant_class(v), 0) + 1
+        consequences = {}
+        for v in variants:
+            c = ((v["csq"] or {}).get("Consequence") or "no_annotation").split("&")[0]
+            consequences[c] = consequences.get(c, 0) + 1
+        out.append(table(["Variant class", "n", "%"],
+                         [[tex(k), str(n), f"{100 * n / len(variants):.1f}"] for k, n in sorted(classes.items())] or [["none", "0", "-"]],
+                         spec="lrr", caption="PASS somatic variants by class"))
+        top_consequences = sorted(consequences.items(), key=lambda kv: -kv[1])[:12]
+        out.append(table(["Consequence (canonical transcript)", "n"], [[tex(k), str(n)] for k, n in top_consequences] or [["none", "0"]],
+                         spec="lr", size=r"\small", caption="Most frequent consequences"))
+        tmb_line = (f"TMB is {num(tmb)} mut/Mb over all PASS variants and {num(tmb_ns)} non-synonymous mut/Mb, "
+                    f"over {num(size_mb, 1)} Mb ({tex(size_basis)}). ") if tmb is not None else \
+            f"TMB not computed: {tex(size_basis)}. "
+        out.append(tmb_line + f"The usual TMB-high line is {TMB_HIGH:g} mut/Mb; panel and exome TMB differ, so "
+                   "compare within one assay.\n")
+        uv_bits = [f"{uv['ct']} of {uv['snvs']} SNVs are C>T"]
+        if uv["dipyrimidine_fraction"] is not None:
+            uv_bits.append(f"{100 * uv['dipyrimidine_fraction']:.0f}\\% of those at a dipyrimidine")
+        uv_bits.append(f"{uv['cc_tt']} CC>TT doublets")
+        out.append("UV signature: " + ", ".join(uv_bits) + ". A dominant C>T share at dipyrimidines with CC>TT "
+                   "doublets marks a UV-driven (cutaneous) melanoma; acral and mucosal melanomas lack it and carry "
+                   "fewer mutations.\n")
+        if ns_ccf:
+            out.append(rf"Cancer cell fraction of the non-synonymous variants (purity {num(args.purity)}, "
+                       rf"ploidy {num(args.ploidy) if args.ploidy else 'NA'}, "
+                       rf"{'Sequenza segments' if segments else 'no segments'}): {clonal_ns} of {len(ns_ccf)} clonal "
+                       rf"at CCF $\geq$ {args.clonal_ccf:g}. Point estimates without confidence intervals." + "\n")
+            out.append(table(["CCF", "n", ""], [[a, str(b), c] for a, b, c in
+                                               histogram_rows(ns_ccf, [0, 0.2, 0.4, 0.6, 0.8, 1.0])],
+                             spec="lrl", size=r"\small", caption="CCF distribution, non-synonymous variants"))
 
     # 6. RNA support ----------------------------------------------------------
     out.append(r"\section{RNA support across timepoints}")
@@ -692,6 +736,14 @@ def build_report(args):
                rf"MHC I IC50 $\leq$ {args.class_i_ic50:g} nM or percentile $\leq$ {args.class_i_percentile:g}; "
                rf"MHC II IC50 $\leq$ {args.class_ii_ic50:g} nM or percentile $\leq$ {args.class_ii_percentile:g}. "
                r"pVACseq's own Tier is shown for comparison." + "\n")
+    out.append(figure_block(args.candidate_figure,
+                            "Candidate landscape: cancer cell fraction against agretopicity, coloured by what "
+                            "prioritisation decided and sized by expression. Clonal and strongly differentiated "
+                            "from the wild type is top right."))
+    out.append(figure_block(args.flag_figure,
+                            "Flags across all candidates. Red flags reject a candidate, amber ones caution. "
+                            "Nothing was deleted: every candidate keeps its row in the prioritised table.",
+                            width=r"0.9\textwidth"))
     week6_col = next((c for c in (class_i_rows[0] if class_i_rows else (class_ii_rows[0] if class_ii_rows else {}))
                       if c.startswith("RNA VAF (")), None)
     for label, rows_in, ic50, pct in (("MHC class I", class_i_rows, args.class_i_ic50, args.class_i_percentile),
@@ -786,17 +838,24 @@ def build_report(args):
     out.append(r"\section{Not assessed by NeoadjVax}")
     out.append("These sections of the NeoDisc report have no NeoadjVax equivalent yet and are left out rather "
                "than filled with placeholders:\n")
-    out.append(r"\begin{itemize}\setlength{\itemsep}{0pt}"
-               r"\item Allele-specific HLA LOH (LOHHLA / SpecHLA / DASH)."
-               r"\item Genome-wide allele-specific copy-number and HLA copy-number figures."
-               r"\item Multi-caller overlap (NeoadjVax calls with Mutect2 only)."
-               r"\item Tumour-associated antigens (TAAs) and cancer-testis antigen expression lists."
-               r"\item Inflammation / T-cell infiltration score."
-               r"\item Virus detection from RNA (not relevant to melanoma)."
-               r"\item Splicing, intron-retention and ERV/transposable-element neoantigens."
-               r"\item Mass-spectrometry immunopeptidomics."
-               r"\item Sequencing QC summaries (FastQC reports are published under \texttt{fastqc/} for FASTQ inputs)."
-               r"\end{itemize}")
+    # The list shrinks as the pipeline grows: an item that this run did
+    # assess must not still be claimed as missing.
+    missing = []
+    if not loh_rows:
+        missing.append(r"\item Allele-specific HLA LOH: no SpecHLA result was given for this patient "
+                       r"(samplesheet column \texttt{hla\_loh}).")
+    missing += [
+        r"\item Genome-wide allele-specific copy-number and HLA copy-number figures.",
+        r"\item Multi-caller overlap (NeoadjVax calls with Mutect2 only).",
+        r"\item Tumour-associated antigens and cancer-testis antigen lists: scored per patient in "
+        r"\texttt{taa/} and in the workbook, but not summarised in this report.",
+        r"\item Inflammation / T-cell infiltration score.",
+        r"\item Virus detection from RNA (not relevant to melanoma).",
+        r"\item Splicing, intron-retention and ERV/transposable-element neoantigens.",
+        r"\item Mass-spectrometry immunopeptidomics.",
+        r"\item Sequencing QC summaries (FastQC reports are published under \texttt{fastqc/} for FASTQ inputs).",
+    ]
+    out.append(r"\begin{itemize}\setlength{\itemsep}{0pt}" + "".join(missing) + r"\end{itemize}")
 
     # 11. Methods -------------------------------------------------------------
     out.append(r"\section{Methods in brief}")
@@ -828,7 +887,9 @@ def build_report(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--patient", required=True)
-    parser.add_argument("--vcf", type=Path, required=True, help="VEP + readcount annotated somatic VCF")
+    parser.add_argument("--vcf", type=Path,
+                        help="VEP + readcount annotated somatic VCF. Omit when the run did not include "
+                             "somatic calling: the variant, TMB, UV and clonality sections then say so.")
     parser.add_argument("--purity", type=float, required=True)
     parser.add_argument("--ploidy", type=float)
     parser.add_argument("--sex", type=str.lower, choices=["male", "female"])
@@ -851,6 +912,12 @@ def main(argv=None):
                         help="pVACfuse flags FFPM below this (default: 0.1)")
     parser.add_argument("--rna-support-summary", type=Path)
     parser.add_argument("--rna-support-figure", type=Path)
+    # Figures are drawn by bin/report_figures.py and arrive here as files,
+    # so each can be regenerated and checked without building the report.
+    parser.add_argument("--candidate-figure", type=Path, help="candidate landscape from report_figures.py")
+    parser.add_argument("--flag-figure", type=Path, help="flag summary from report_figures.py")
+    parser.add_argument("--hla-loh-figure", type=Path, help="HLA-LOH figure from report_figures.py")
+    parser.add_argument("--hla-loh", type=Path, help="tidy HLA-LOH table from parse_hla_loh.py")
     parser.add_argument("--timepoint-label", action="append", help="RNA timepoint labels, in order")
     parser.add_argument("--project", default="")
     parser.add_argument("--diagnosis", default="Melanoma")

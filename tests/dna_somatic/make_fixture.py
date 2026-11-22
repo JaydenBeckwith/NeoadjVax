@@ -130,8 +130,23 @@ def generate(root, samtools="samtools", sam_only=False):
                 inputs.append({"path": str(rna_bam), "sample": f"P1_{timepoint}", "kind": "rna_bam", "reads": PAIRS * 2})
             segments = root / "P1_segments.txt"
             segments.write_text('"chromosome"\t"start.pos"\t"end.pos"\t"CNt"\t"A"\t"B"\n"chr1"\t1\t10000\t3\t2\t1\n')
+            # A SpecHLA merge.hla.copy.txt, shaped like cal.hla.copy.pl's
+            # output: one locus lost (a zero side in copyratio), one kept.
+            # Only P1 has one, so the run also covers the patient who does
+            # not and must still reach the workbook.
+            hla_loh = root / "P1_merge.hla.copy.txt"
+            hla_loh.write_text(
+                "Sample\tHLA\tAllele1\tAllele2\tcopyratio\tKeptHLA\tLossHLA\tFreq1\tFreq2"
+                "\tPurity\tHet_num\tLOH\tSampleDir\tHomozygous\tClass\n"
+                # The lost allele is one this patient's hla_alleles column
+                # also carries, so candidates really would be flagged on it.
+                "P1\tA\tA*01:01:01:01\tA*02:01:01:01\t2:0\tA*01:01:01:01\tA*02:01:01:01"
+                "\t0.62\t0.38\t0.62\t42\tY\tP1\tN\tI\n"
+                "P1\tB\tB*07:02:01:01\tB*08:01:01:01\t1:1\tB*07:02:01:01\tB*08:01:01:01"
+                "\t0.5\t0.5\t0.62\t55\tN\tP1\tN\tI\n")
             row.update(purity="0.62", ploidy="3.1", sequenza_segments=str(segments), sex="female",
                        hla_alleles="HLA-A*02:01|HLA-B*07:02|DRB1*15:01",
+                       hla_loh=str(hla_loh),
                        starfusion_tsv=str(starfusion_tsv))
         else:
             # P2 has no STAR-Fusion table, so the fusion branch runs STAR-Fusion
@@ -150,6 +165,11 @@ def generate(root, samtools="samtools", sam_only=False):
         'gene_type "protein_coding"; gene_name "TP53";\n'
         'chr1\ttest\texon\t1\t1000\t.\t+\t.\tgene_id "ENSG00000141510.16"; '
         'gene_type "protein_coding"; gene_name "TP53";\n')
+    # A shared-antigen peptide set for pVACbind. Two peptides is enough for
+    # the wiring; the stub never reads them.
+    (root / "taa_peptides.fasta").write_text(
+        ">MAGEA3_168_176\nEVDPIGHLY\n>CTAG1B_157_165\nSLLMWITQC\n")
+
     header = "ENSEMBL_ID\tGENE_NAME\tGROUP\tQUANTILE\tTPM\n"
     (root / "gtex_db.tsv").write_text(
         header + "ENSG00000141510\tTP53\tSkin - Sun Exposed (Lower leg)\t0.5\t12.5000\n"
@@ -159,11 +179,12 @@ def generate(root, samtools="samtools", sam_only=False):
 
     fields = ["patient_id", "tumor_r1", "tumor_r2", "normal_r1", "normal_r2", "tumor_bam", "normal_bam",
               "rna_baseline_bam", "rna_week6_bam", "rna_baseline_r1", "rna_baseline_r2", "starfusion_tsv",
-              "purity", "ploidy", "sequenza_segments", "sex", "hla_alleles"]
+              "purity", "ploidy", "sequenza_segments", "sex", "hla_loh", "hla_alleles"]
     write_csv(root / "samplesheet.csv", fields, rows)
     manifest = {"synthetic": True, "test_type": "wiring_only", "patients": list(PATIENTS),
                 "fastq_patients": ["P2"], "hla_typed_patients": ["P2"],
                 "rna_bams": {"P1": ["rna_baseline", "rna_week6"]}, "scatter": list(SCATTER),
+                "hla_loh_patients": ["P1"],
                 # every fusion patient reaches AGFusion and pVACfuse; only the
                 # one without a STAR-Fusion table reaches STAR-Fusion
                 "fusion_patients": ["P1", "P2"], "starfusion_patients": ["P2"],

@@ -19,20 +19,32 @@ tumour + normal DNA (FASTQ, or aligned BAM)
   │                     + contamination → FilterMutectCalls → PASS, normalised
   ├─ HLA_TYPING         HLA-HD on the normal (class I + II incl. DQA1/DPA1),
   │                     or the samplesheet's hla_alleles
+  │                     + SpecHLA HLA-LOH read in from the samplesheet
   ├─ PROXIMAL_VARIANTS  HaplotypeCaller on the normal around somatic sites
   │                     → WhatsHap phasing on the tumour BAM → VEP
-  └─ NEOANTIGENS        VEP → bam-readcount (tumour + normal DNA, optional baseline
-                        and week 6 RNA BAMs) → vcf-readcount-annotator
-                        → pVACseq (--tumor-purity from Sequenza, baseline RNA counts,
-                          --phased-proximal-variants-vcf) → week 6 RNA columns
-                        → CCF from ploidy/segments
-  (EXPRESSION           optional GTEx/TCGA context and gene panel)
-  (FUSION               optional STAR-Fusion → AGFusion → pVACfuse, --fusion true)
+  ├─ NEOANTIGENS        VEP → bam-readcount (tumour + normal DNA, optional baseline
+  │                     and week 6 RNA BAMs) → vcf-readcount-annotator
+  │                     → pVACseq (--tumor-purity from Sequenza, baseline RNA counts,
+  │                       --phased-proximal-variants-vcf) → week 6 RNA columns
+  │                     → CCF from ploidy/segments
+  ├─ EXPRESSION         optional GTEx/TCGA context, gene panel, shared tumour antigens
+  ├─ FUSION             optional STAR-Fusion → AGFusion → pVACfuse, --fusion true
+  ├─ PRIORITIZE         one ranked list per MHC class: HLA-LOH, clonality, expression
+  │                     and agretopicity as flags, with a reason per rejection
+  ├─ LONG_PEPTIDES      mutant protein context → 25mers to order (+ optional pVACvector)
+  ├─ CLONAL_STRUCTURE   CCF clusters and which are still transcribed at week 6
   └─ REPORT             RNA support per timepoint (figure) → melanoma report (LaTeX → PDF)
+                        + one .xlsx per patient for the wet lab
 ```
 
-Sequenza is not run here: purity (and optionally ploidy and the segments
-file) come in through the samplesheet from your existing Sequenza runs.
+Sequenza and SpecHLA are not run here: purity, ploidy, the segments file
+and the HLA-LOH result come in through the samplesheet from your existing
+runs.
+
+`--run` picks which analyses happen — `all` (the default), `somatic`,
+`fusion`, `markers`, or a comma-separated combination. Alignment, HLA
+typing, HLA-LOH and the Sequenza values always run whatever you choose.
+See [`docs/RUNNING.md`](docs/RUNNING.md).
 
 ## Quick start
 
@@ -61,9 +73,14 @@ nextflow run main.nf -profile gadi \
 
 ## Documentation
 
+- [`docs/RUNNING.md`](docs/RUNNING.md): `--run` — choosing which analyses a run does, and the peptide lengths.
 - [`assets/samplesheet_schema.md`](assets/samplesheet_schema.md): the samplesheet, including purity, ploidy and segments.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): each step, why it is there, and the outputs.
 - [`docs/EXPRESSION.md`](docs/EXPRESSION.md): the optional GTEx/TCGA expression step and the presentation-machinery/driver panel, and building the reference tables.
+- [`docs/HLA_LOH.md`](docs/HLA_LOH.md): reading a SpecHLA result in, and what counts as a lost allele.
+- [`docs/PRIORITISATION.md`](docs/PRIORITISATION.md): the flags, the ranking, clonal structure and the per-patient workbook.
+- [`docs/LONG_PEPTIDES.md`](docs/LONG_PEPTIDES.md): designing the peptides to order, and the optional pVACvector construct.
+- [`docs/TAA.md`](docs/TAA.md): shared tumour antigens as a second channel.
 - [`docs/FUSION.md`](docs/FUSION.md): the optional STAR-Fusion/AGFusion/pVACfuse branch.
 - [`docs/REPORT.md`](docs/REPORT.md): the per-patient RNA-support figure and melanoma report.
 - [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md): every reference file and container, and where to get it.
@@ -85,9 +102,3 @@ python tests/dna_somatic/check_results.py --manifest tests/dna_somatic/generated
 
 See [`tests/dna_somatic/README.md`](tests/dna_somatic/README.md).
 
-## History
-
-Up to v0.1.0-dev this repository also carried RNA variant calling,
-splicing, gene fusion, ERV/TE, in-pipeline Sequenza and HLA-LOH branches.
-They were removed in v0.2.0-dev to focus on the somatic path; they remain
-in the git history on `main` before the somatic rebuild.

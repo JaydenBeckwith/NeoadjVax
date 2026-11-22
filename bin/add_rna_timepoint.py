@@ -70,12 +70,19 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     counts = read_rna_counts(args.vcf)
-    with args.report.open(newline="") as src, args.output.open("w", newline="") as dst:
+    # Read the report fully before opening the output: calling this with
+    # --output pointing at the input (to add a second timepoint to a table
+    # that already has one) would otherwise truncate it before it is read.
+    with args.report.open(newline="") as src:
         reader = csv.DictReader(src, delimiter="\t")
+        fieldnames = reader.fieldnames or []
+        rows = [[row.get(f, "") for f in fieldnames] + list(lookup(counts, row.get("ID", "")))
+                for row in reader]
+
+    with args.output.open("w", newline="") as dst:
         writer = csv.writer(dst, delimiter="\t", lineterminator="\n")
-        writer.writerow(reader.fieldnames + [f"RNA Depth ({args.label})", f"RNA VAF ({args.label})"])
-        for row in reader:
-            writer.writerow([row[f] for f in reader.fieldnames] + list(lookup(counts, row["ID"])))
+        writer.writerow(fieldnames + [f"RNA Depth ({args.label})", f"RNA VAF ({args.label})"])
+        writer.writerows(rows)
 
 
 if __name__ == "__main__":
