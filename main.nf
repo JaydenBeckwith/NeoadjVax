@@ -31,6 +31,7 @@ include { REPORT            } from './workflows/report'
 include { PRIORITIZE } from './modules/local/pvactools/prioritize'
 include { GENERATE_PROTEIN_FASTA; DESIGN_LONG_PEPTIDES; PVACVECTOR } from './modules/local/pvactools/long_peptides'
 include { WORKBOOK } from './modules/local/report/workbook'
+include { PVACBIND } from './modules/local/expression/taa'
 include { SAMTOOLS_FAIDX; CREATE_SEQUENCE_DICTIONARY; BWA_INDEX } from './modules/local/reference/prepare_genome'
 
 // ---------------------------------------------------------------------
@@ -229,23 +230,35 @@ workflow {
     NEOANTIGENS(SOMATIC_CALLING.out.pass_vcf, bams_ch, PROXIMAL_VARIANTS.out.phased_vcf,
                 HLA_TYPING.out.alleles, clinical_ch, rna_ch, fasta, fai, vep_cache, vep_plugins)
 
-    // Expression context is opt-in: without a reference table there is
-    // nothing to compare against, so the CCF reports are the final output.
+    // Expression context runs when there is anything to compare against:
+    // a reference table, or the patient's own RNA with a GTF to count it
+    // against. With neither there is nothing to say, and the CCF reports
+    // are the final candidate output.
     expression_ch = Channel.empty()
     panel_ch = Channel.empty()
-    if (gtex_db || tcga_db) {
+    taa_ch = Channel.empty()
+    if (gtex_db || tcga_db || rna_gtf) {
         if (!rna_gtf) log.warn "No --rna_gtf: skipping RNA quantification, so expression context comes from the reference tables only"
+        if (!(gtex_db || tcga_db)) log.warn "No --gtex_db or --tcga_db: expression comes from this patient's RNA alone, with no normal-tissue or cohort context"
         EXPRESSION(rna_ch, NEOANTIGENS.out.ccf, NEOANTIGENS.out.vep_vcf, clinical_ch,
                    rna_gtf, gtex_db, tcga_db)
         expression_ch = EXPRESSION.out.annotated
         panel_ch = EXPRESSION.out.panel
+        taa_ch = EXPRESSION.out.taa
+    }
+
+    // Binding predictions for a shared-antigen peptide set, which depends
+    // only on the patient's alleles. Needs a peptide FASTA: none ships
+    // here, because which epitopes are worth testing is a judgement.
+    if (params.taa && params.taa_peptides) {
+        PVACBIND(HLA_TYPING.out.alleles, file(params.taa_peptides, checkIfExists: true))
     }
 
     // One ranked list per MHC class, from whichever annotation the run
     // produced: the expression-annotated tables when EXPRESSION ran,
     // otherwise the CCF tables. HLA-LOH joins in for the patients that
     // have it (remainder: true keeps the rest, with no LOH column).
-    prioritize_in_ch = (gtex_db || tcga_db ? expression_ch : NEOANTIGENS.out.ccf)
+    prioritize_in_ch = (gtex_db || tcga_db || rna_gtf ? expression_ch : NEOANTIGENS.out.ccf)
         .join(HLA_TYPING.out.loh, remainder: true)
         .filter { it[1] != null }
         .map { it[-1] == null ? it[0..-2] + [[]] : it }
@@ -281,6 +294,7 @@ workflow {
             .join(long_peptides_ch, remainder: true)
             .join(HLA_TYPING.out.loh, remainder: true)
             .join(panel_ch, remainder: true)
+            .join(taa_ch, remainder: true)
             .filter { it[1] != null }
             .map { row -> row[0..0] + row[1..-1].collect { it == null ? [] : it } }
         WORKBOOK(workbook_in_ch)
