@@ -29,6 +29,7 @@ include { EXPRESSION        } from './workflows/expression'
 include { FUSION            } from './workflows/fusion'
 include { REPORT            } from './workflows/report'
 include { PRIORITIZE } from './modules/local/pvactools/prioritize'
+include { GENERATE_PROTEIN_FASTA; DESIGN_LONG_PEPTIDES; PVACVECTOR } from './modules/local/pvactools/long_peptides'
 include { SAMTOOLS_FAIDX; CREATE_SEQUENCE_DICTIONARY; BWA_INDEX } from './modules/local/reference/prepare_genome'
 
 // ---------------------------------------------------------------------
@@ -248,6 +249,28 @@ workflow {
         .filter { it[1] != null }
         .map { it[-1] == null ? it[0..-2] + [[]] : it }
     PRIORITIZE(prioritize_in_ch)
+
+    // Long peptides for the ranked candidates. The flanking sequence is in
+    // no table, so pVACtools regenerates the mutant protein context from
+    // the same VCF pVACseq read, with the same phasing.
+    long_peptides_ch = Channel.empty()
+    if (params.long_peptides) {
+        GENERATE_PROTEIN_FASTA(NEOANTIGENS.out.readcounts_vcf.join(PROXIMAL_VARIANTS.out.phased_vcf))
+        DESIGN_LONG_PEPTIDES(PRIORITIZE.out.tsv.join(GENERATE_PROTEIN_FASTA.out.fasta))
+        long_peptides_ch = DESIGN_LONG_PEPTIDES.out.tsv
+
+        // One string-of-beads construct per patient, from the Combined
+        // peptide set where there is one (both MHC classes), else whatever
+        // single class the run produced.
+        if (params.vaccine_vector) {
+            PVACVECTOR(DESIGN_LONG_PEPTIDES.out.fasta
+                .map { meta, fastas ->
+                    def list = fastas instanceof List ? fastas : [fastas]
+                    tuple(meta, list.find { it.name.contains('Combined') } ?: list.sort { it.name }.first())
+                }
+                .join(HLA_TYPING.out.alleles))
+        }
+    }
 
     // Fusion neoantigens are opt-in and need RNA reads (or an existing
     // STAR-Fusion table), so most patients may have none.
