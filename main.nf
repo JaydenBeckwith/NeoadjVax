@@ -28,6 +28,7 @@ include { NEOANTIGENS       } from './workflows/neoantigens'
 include { EXPRESSION        } from './workflows/expression'
 include { FUSION            } from './workflows/fusion'
 include { REPORT            } from './workflows/report'
+include { PRIORITIZE } from './modules/local/pvactools/prioritize'
 include { SAMTOOLS_FAIDX; CREATE_SEQUENCE_DICTIONARY; BWA_INDEX } from './modules/local/reference/prepare_genome'
 
 // ---------------------------------------------------------------------
@@ -86,6 +87,11 @@ def validateSamplesheet(path) {
         }
         if (row.sequenza_segments && !file(row.sequenza_segments).exists()) {
             error "samplesheet: ${id} sequenza_segments not found: ${row.sequenza_segments}"
+        }
+        // SpecHLA HLA-LOH result (merge.hla.copy.txt), computed outside
+        // this pipeline from the tumour BAM and the Sequenza purity/ploidy.
+        if (row.hla_loh && !file(row.hla_loh).exists()) {
+            error "samplesheet: ${id} hla_loh not found: ${row.hla_loh}"
         }
         if (row.sex && !(row.sex.toLowerCase() in ['male', 'female'])) {
             error "samplesheet: ${id} sex '${row.sex}' must be male or female (or left blank)"
@@ -232,6 +238,16 @@ workflow {
         expression_ch = EXPRESSION.out.annotated
         panel_ch = EXPRESSION.out.panel
     }
+
+    // One ranked list per MHC class, from whichever annotation the run
+    // produced: the expression-annotated tables when EXPRESSION ran,
+    // otherwise the CCF tables. HLA-LOH joins in for the patients that
+    // have it (remainder: true keeps the rest, with no LOH column).
+    prioritize_in_ch = (gtex_db || tcga_db ? expression_ch : NEOANTIGENS.out.ccf)
+        .join(HLA_TYPING.out.loh, remainder: true)
+        .filter { it[1] != null }
+        .map { it[-1] == null ? it[0..-2] + [[]] : it }
+    PRIORITIZE(prioritize_in_ch)
 
     // Fusion neoantigens are opt-in and need RNA reads (or an existing
     // STAR-Fusion table), so most patients may have none.
