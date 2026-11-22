@@ -18,7 +18,7 @@ process WORKBOOK {
     publishDir "${params.outdir}/${meta.id}", mode: 'copy'
 
     input:
-    tuple val(meta), path(prioritized), path(long_peptides), path(hla_loh), path(gene_panel), path(taa)
+    tuple val(meta), path(prioritized), path(long_peptides), path(hla_loh), path(gene_panel), path(taa), path(clonal)
 
     output:
     tuple val(meta), path("${meta.id}.xlsx"), emit: xlsx
@@ -53,6 +53,11 @@ process WORKBOOK {
     for loh in ${hla_loh}; do
         [ -e "\$loh" ] || continue
         args+=(--sheet "HLA LOH=\$loh")
+    done
+
+    for clusters in ${clonal}; do
+        [ -e "\$clusters" ] || continue
+        args+=(--sheet "Clonal structure=\$clusters")
     done
 
     for antigens in ${taa}; do

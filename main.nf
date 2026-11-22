@@ -32,6 +32,7 @@ include { PRIORITIZE } from './modules/local/pvactools/prioritize'
 include { GENERATE_PROTEIN_FASTA; DESIGN_LONG_PEPTIDES; PVACVECTOR } from './modules/local/pvactools/long_peptides'
 include { WORKBOOK } from './modules/local/report/workbook'
 include { PVACBIND } from './modules/local/expression/taa'
+include { CLONAL_STRUCTURE } from './modules/local/report/clonal_structure'
 include { SAMTOOLS_FAIDX; CREATE_SEQUENCE_DICTIONARY; BWA_INDEX } from './modules/local/reference/prepare_genome'
 
 // ---------------------------------------------------------------------
@@ -286,6 +287,13 @@ workflow {
         }
     }
 
+    // Clonal clusters, and which survived to week 6 in the RNA.
+    clonal_ch = Channel.empty()
+    if (params.clonal_structure) {
+        CLONAL_STRUCTURE(PRIORITIZE.out.tsv)
+        clonal_ch = CLONAL_STRUCTURE.out.clusters
+    }
+
     // One spreadsheet per patient, from whatever the run produced. Each
     // optional table joins with remainder: true and arrives as [] when
     // the patient has none, so a DNA-only patient still gets a workbook.
@@ -295,6 +303,7 @@ workflow {
             .join(HLA_TYPING.out.loh, remainder: true)
             .join(panel_ch, remainder: true)
             .join(taa_ch, remainder: true)
+            .join(clonal_ch, remainder: true)
             .filter { it[1] != null }
             .map { row -> row[0..0] + row[1..-1].collect { it == null ? [] : it } }
         WORKBOOK(workbook_in_ch)
