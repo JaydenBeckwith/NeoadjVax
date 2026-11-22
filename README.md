@@ -102,9 +102,3 @@ python tests/dna_somatic/check_results.py --manifest tests/dna_somatic/generated
 
 See [`tests/dna_somatic/README.md`](tests/dna_somatic/README.md).
 
-## History
-
-Up to v0.1.0-dev this repository also carried RNA variant calling,
-splicing, gene fusion, ERV/TE, in-pipeline Sequenza and HLA-LOH branches.
-They were removed in v0.2.0-dev to focus on the somatic path; they remain
-in the git history on `main` before the somatic rebuild.

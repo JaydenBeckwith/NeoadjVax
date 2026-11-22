@@ -54,6 +54,56 @@ process RNA_SUPPORT {
     """
 }
 
+// The report's prediction figures (bin/report_figures.py): the candidate
+// landscape, the flag summary and the HLA-LOH overview.
+//
+// Separate from PATIENT_REPORT on purpose. The report writes LaTeX and
+// draws nothing, so a figure can be regenerated from an existing results
+// directory and looked at on its own, without pdflatex or the rest of the
+// report, and the data behind each one is testable without matplotlib.
+process REPORT_FIGURES {
+    tag "${meta.id}"
+    label 'process_low'
+    container params.containers.plots
+    publishDir "${params.outdir}/${meta.id}/report", mode: 'copy'
+
+    input:
+    tuple val(meta), path(prioritized, stageAs: 'prioritized/*'), path(hla_loh)
+
+    output:
+    tuple val(meta), path("${meta.id}.*.pdf"), path("${meta.id}.*.png"), optional: true, emit: figures
+
+    script:
+    def loh_arg = hla_loh ? "--hla-loh ${hla_loh}" : ''
+    """
+    # Candidate figures come from the Combined table where there is one
+    # (both MHC classes), otherwise whichever single class the run made.
+    report=\$(ls prioritized/* 2>/dev/null | grep -i combined | head -n1 || true)
+    if [ -z "\$report" ]; then
+        report=\$(ls prioritized/* 2>/dev/null | head -n1 || true)
+    fi
+
+    report_figures.py \\
+        --prefix ${meta.id} \\
+        \${report:+--prioritized "\$report"} \\
+        ${loh_arg} \\
+        --top-labels ${params.report_figure_labels}
+    """
+
+    stub:
+    """
+    # Only the figures the inputs would actually have produced, so the
+    # smoke test checks the wiring rather than the stub's optimism.
+    if ls prioritized/* >/dev/null 2>&1; then
+        touch ${meta.id}.candidates.pdf ${meta.id}.candidates.png
+        touch ${meta.id}.flags.pdf ${meta.id}.flags.png
+    fi
+    if [ -n "${hla_loh}" ]; then
+        touch ${meta.id}.hla_loh.pdf ${meta.id}.hla_loh.png
+    fi
+    """
+}
+
 // LaTeX report from everything the run produced for this patient. Each
 // optional input arrives as [] when absent and its section says so.
 process PATIENT_REPORT {
@@ -65,7 +115,7 @@ process PATIENT_REPORT {
     input:
     tuple val(meta), path(readcounts_vcf), val(hla_alleles), val(purity), val(ploidy), val(sex), path(segments),
           path(reports, stageAs: 'reports/*'), path(panel), path(rna_summary), path(rna_figure), val(timepoints),
-          path(pvacfuse_dir), path(fusion_predictions)
+          path(pvacfuse_dir), path(fusion_predictions), path(report_figures), path(hla_loh)
     path fasta
     path fasta_fai
     path target_intervals
@@ -77,6 +127,7 @@ process PATIENT_REPORT {
     // No VCF means the run did not include somatic calling; the variant,
     // TMB, UV and clonality sections then say they were not assessed.
     def vcf_arg      = readcounts_vcf ? "--vcf ${readcounts_vcf}" : ''
+    def loh_arg      = hla_loh ? "--hla-loh ${hla_loh}" : ''
     def ploidy_arg   = ploidy      ? "--ploidy ${ploidy}" : ''
     def sex_arg      = sex         ? "--sex ${sex}" : ''
     def segments_arg = segments    ? "--segments ${segments}" : ''
@@ -99,9 +150,22 @@ process PATIENT_REPORT {
     }
     class_i=\$(pick MHC_I)
     class_ii=\$(pick MHC_II)
+
+    # Figures are drawn by REPORT_FIGURES and staged here beside the .tex,
+    # which is where \\includegraphics looks for them. Each is optional:
+    # a run without candidates has no candidate figure to embed.
+    fig() { [ -e "${meta.id}.\$1.pdf" ] && echo "${meta.id}.\$1.pdf"; }
+    candidate_figure=\$(fig candidates)
+    flag_figure=\$(fig flags)
+    loh_figure=\$(fig hla_loh)
+
     patient_report.py \\
         --patient ${meta.id} \\
         ${vcf_arg} \\
+        ${loh_arg} \\
+        \${candidate_figure:+--candidate-figure \$candidate_figure} \\
+        \${flag_figure:+--flag-figure \$flag_figure} \\
+        \${loh_figure:+--hla-loh-figure \$loh_figure} \\
         --hla '${hla_alleles}' \\
         --purity ${purity} ${ploidy_arg} ${sex_arg} ${segments_arg} \\
         --fasta ${fasta} --fai ${fasta_fai} \\
@@ -139,7 +203,9 @@ process REPORT_PDF {
     publishDir "${params.outdir}/${meta.id}/report", mode: 'copy'
 
     input:
-    tuple val(meta), path(tex), path(figure)
+    // Every figure the .tex references has to be staged beside it, or
+    // pdflatex stops on the missing file.
+    tuple val(meta), path(tex), path(figure), path(report_figures)
 
     output:
     tuple val(meta), path("${meta.id}.report.pdf"), emit: pdf

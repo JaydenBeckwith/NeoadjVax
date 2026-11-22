@@ -431,7 +431,8 @@ workflow {
     if (params.report) {
         REPORT(readcounts_vcf_ch, week6_vcf_ch, rna_ch,
                ccf_ch, candidates_ch, panel_ch, HLA_TYPING.out.alleles, clinical_ch,
-               pvacfuse_ch, fusion_calls_ch, fasta, fai, target_intervals)
+               pvacfuse_ch, fusion_calls_ch, prioritized_ch, HLA_TYPING.out.loh,
+               fasta, fai, target_intervals)
     }
 
     workflow.onComplete = {

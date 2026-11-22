@@ -76,6 +76,7 @@ def check(manifest, trace, outdir, analyses="somatic,fusion,markers"):
         "WORKBOOK": patients,
         "PVACVECTOR": patients,
         "PVACBIND": patients,
+        "REPORT:REPORT_FIGURES": patients,
         "REPORT:RNA_SUPPORT": sum(1 for timepoints in rna.values() if timepoints),
         "REPORT:PATIENT_REPORT": patients,
         "REPORT:REPORT_PDF": patients,
@@ -109,6 +110,8 @@ def check(manifest, trace, outdir, analyses="somatic,fusion,markers"):
             outdir / patient / f"{patient}.xlsx",
         ]
         somatic_paths = [
+            outdir / patient / "report" / f"{patient}.candidates.pdf",
+            outdir / patient / "report" / f"{patient}.flags.pdf",
             outdir / patient / "somatic_variants" / f"{patient}.somatic.pass.vcf.gz",
             outdir / patient / "pvacseq_input" / f"{patient}.somatic.vep.readcounts.vcf.gz.tbi",
             outdir / patient / "pvacseq_input" / f"{patient}.phased_proximal.vcf.gz.tbi",
@@ -134,6 +137,7 @@ def check(manifest, trace, outdir, analyses="somatic,fusion,markers"):
                          f"{patient}.Combined.aggregated.ccf.expression.tsv")
         if patient in manifest.get("hla_loh_patients", []):
             paths.append(outdir / patient / "hla_loh" / f"{patient}.hla_loh.tsv")
+            paths.append(outdir / patient / "report" / f"{patient}.hla_loh.pdf")
         if rna.get(patient) and somatic:
             paths.append(outdir / patient / "report" / f"{patient}.rna_support.summary.tsv")
             paths.append(outdir / patient / "report" / f"{patient}.rna_support.pdf")

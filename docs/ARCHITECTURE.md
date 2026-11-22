@@ -259,7 +259,11 @@ Published: `<id>/clonal_structure/`.
 
 See [`REPORT.md`](REPORT.md).
 
-1. `bin/rna_support.py`, for every patient with at least one RNA BAM:
+1. `bin/report_figures.py`, for every patient: the candidate landscape,
+   the flag summary and the HLA-LOH overview. The report draws nothing
+   itself, so each figure can be regenerated from an existing results
+   directory on its own. Turn it off with `--report_figures false`.
+2. `bin/rna_support.py`, for every patient with at least one RNA BAM:
    each non-synonymous PASS variant is called RNA-supported at a
    timepoint when at least `--rna_support_min_alt_reads` RNA reads carry
    the alt allele, and grouped as expressed both / week 6 only / baseline
@@ -267,14 +271,14 @@ See [`REPORT.md`](REPORT.md).
    above `--clonal_ccf`) and for clonal MHC I and II neoantigens (best
    peptide under the `--neoag_class_*` IC50 or percentile thresholds).
    Writes a per-variant table, a summary table and the figure.
-2. `bin/patient_report.py`, for every patient: a LaTeX report laid out
+3. `bin/patient_report.py`, for every patient: a LaTeX report laid out
    after the NeoDisc templates but filled from this pipeline: TCGA SKCM
    genomic subtype and driver status, TMB and UV signature, purity, ploidy
    and clonality, HLA alleles and gene-level HLA/B2M copy number, the gene
    panel, the RNA-support figure, GTEx/TCGA context and the top
    candidates. NeoDisc sections with no equivalent are listed as not
    assessed.
-3. `pdflatex` (twice) unless `--report_pdf false`.
+4. `pdflatex` (twice) unless `--report_pdf false`.
 
 The report also reads the pVACfuse directory when the fusion branch ran,
 and distinguishes "branch did not run" from "ran, but no fusion had a

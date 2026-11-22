@@ -118,6 +118,19 @@ def not_available(what):
     return rf"\emph{{{tex(what)}}}" + "\n\n"
 
 
+def figure_block(path, caption, width=r"\textwidth"):
+    """Embed a figure drawn elsewhere (bin/report_figures.py, rna_support.py).
+
+    This report draws nothing itself: every plot is made by a script that
+    can be run and checked on its own, and arrives here as a file.
+    """
+    if not path:
+        return ""
+    return (r"\begin{figure}[H]\centering" + "\n" +
+            rf"\includegraphics[width={width}]{{{Path(path).name}}}" + "\n" +
+            rf"\caption{{{caption}}}" + "\n" + r"\end{figure}" + "\n")
+
+
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
@@ -472,6 +485,7 @@ def build_report(args):
     class_i_rows = read_tsv(args.class_i)
     class_ii_rows = read_tsv(args.class_ii)
     rna_summary = read_tsv(args.rna_support_summary)
+    loh_rows = read_tsv(args.hla_loh)
     fusion_status, fusion_reports = read_pvacfuse(args.pvacfuse_dir)
     timepoints = args.timepoint_label or []
 
@@ -578,10 +592,28 @@ def build_report(args):
                            tex(panel_by_gene[g].get("Mutations")), flag_colour(panel_by_gene[g].get("Panel Flag"))]
                           for g in hla_genes], spec="lrrllll", size=r"\footnotesize",
                          caption="Gene-level copy number and expression at the class I loci and B2M"))
-    out.append(r"\textbf{Allele-specific HLA LOH was not assessed.} The rows above are gene-level copy number "
-               r"from Sequenza segments; short reads mismap across HLA alleles, so a minor copy number of 0 here "
-               r"is a prompt to run an allele-specific caller (LOHHLA, SpecHLA, DASH), not a call. Candidates "
-               r"restricted to a lost allele would not be presented." + "\n")
+    if loh_rows:
+        out.append(table(["Locus", "Call", "Allele 1", "Allele 2", "Lost allele"],
+                         [[tex(r.get("locus")), tex(r.get("call")),
+                           tex(r.get("allele1_pvacseq") or r.get("allele1")),
+                           tex(r.get("allele2_pvacseq") or r.get("allele2")),
+                           tex(r.get("lost_allele_pvacseq") or "-")] for r in loh_rows],
+                         spec="lllll", size=r"\footnotesize",
+                         caption="Allele-specific HLA copy number (SpecHLA)"))
+        out.append(figure_block(args.hla_loh_figure, "HLA loss of heterozygosity per locus. A candidate "
+                                "restricted to a lost allele cannot be presented, whatever else is true of it."))
+        lost_loci = [r.get("locus") for r in loh_rows if (r.get("call") or "") == "loss"]
+        not_evaluable = [r.get("locus") for r in loh_rows if (r.get("call") or "") in ("not_evaluable", "low_purity")]
+        out.append(rf"Allele-specific HLA LOH from SpecHLA, read in with the run. "
+                   rf"{'Lost: ' + tex(', '.join(lost_loci)) + '. ' if lost_loci else 'No locus lost. '}"
+                   rf"{'Not evaluable: ' + tex(', '.join(not_evaluable)) + '. ' if not_evaluable else ''}"
+                   r"Candidates restricted to a lost allele are flagged HLA\_LOST and rejected; a locus that "
+                   r"could not be evaluated gives a caution rather than a pass." + "\n")
+    else:
+        out.append(r"\textbf{Allele-specific HLA LOH was not assessed.} The rows above are gene-level copy number "
+                   r"from Sequenza segments; short reads mismap across HLA alleles, so a minor copy number of 0 here "
+                   r"is a prompt to run an allele-specific caller (LOHHLA, SpecHLA, DASH), not a call. Candidates "
+                   r"restricted to a lost allele would not be presented." + "\n")
 
     # 4. APM panel ------------------------------------------------------------
     out.append(r"\section{Antigen presentation machinery and interferon signalling}")
@@ -704,6 +736,14 @@ def build_report(args):
                rf"MHC I IC50 $\leq$ {args.class_i_ic50:g} nM or percentile $\leq$ {args.class_i_percentile:g}; "
                rf"MHC II IC50 $\leq$ {args.class_ii_ic50:g} nM or percentile $\leq$ {args.class_ii_percentile:g}. "
                r"pVACseq's own Tier is shown for comparison." + "\n")
+    out.append(figure_block(args.candidate_figure,
+                            "Candidate landscape: cancer cell fraction against agretopicity, coloured by what "
+                            "prioritisation decided and sized by expression. Clonal and strongly differentiated "
+                            "from the wild type is top right."))
+    out.append(figure_block(args.flag_figure,
+                            "Flags across all candidates. Red flags reject a candidate, amber ones caution. "
+                            "Nothing was deleted: every candidate keeps its row in the prioritised table.",
+                            width=r"0.9\textwidth"))
     week6_col = next((c for c in (class_i_rows[0] if class_i_rows else (class_ii_rows[0] if class_ii_rows else {}))
                       if c.startswith("RNA VAF (")), None)
     for label, rows_in, ic50, pct in (("MHC class I", class_i_rows, args.class_i_ic50, args.class_i_percentile),
@@ -798,17 +838,24 @@ def build_report(args):
     out.append(r"\section{Not assessed by NeoadjVax}")
     out.append("These sections of the NeoDisc report have no NeoadjVax equivalent yet and are left out rather "
                "than filled with placeholders:\n")
-    out.append(r"\begin{itemize}\setlength{\itemsep}{0pt}"
-               r"\item Allele-specific HLA LOH (LOHHLA / SpecHLA / DASH)."
-               r"\item Genome-wide allele-specific copy-number and HLA copy-number figures."
-               r"\item Multi-caller overlap (NeoadjVax calls with Mutect2 only)."
-               r"\item Tumour-associated antigens (TAAs) and cancer-testis antigen expression lists."
-               r"\item Inflammation / T-cell infiltration score."
-               r"\item Virus detection from RNA (not relevant to melanoma)."
-               r"\item Splicing, intron-retention and ERV/transposable-element neoantigens."
-               r"\item Mass-spectrometry immunopeptidomics."
-               r"\item Sequencing QC summaries (FastQC reports are published under \texttt{fastqc/} for FASTQ inputs)."
-               r"\end{itemize}")
+    # The list shrinks as the pipeline grows: an item that this run did
+    # assess must not still be claimed as missing.
+    missing = []
+    if not loh_rows:
+        missing.append(r"\item Allele-specific HLA LOH: no SpecHLA result was given for this patient "
+                       r"(samplesheet column \texttt{hla\_loh}).")
+    missing += [
+        r"\item Genome-wide allele-specific copy-number and HLA copy-number figures.",
+        r"\item Multi-caller overlap (NeoadjVax calls with Mutect2 only).",
+        r"\item Tumour-associated antigens and cancer-testis antigen lists: scored per patient in "
+        r"\texttt{taa/} and in the workbook, but not summarised in this report.",
+        r"\item Inflammation / T-cell infiltration score.",
+        r"\item Virus detection from RNA (not relevant to melanoma).",
+        r"\item Splicing, intron-retention and ERV/transposable-element neoantigens.",
+        r"\item Mass-spectrometry immunopeptidomics.",
+        r"\item Sequencing QC summaries (FastQC reports are published under \texttt{fastqc/} for FASTQ inputs).",
+    ]
+    out.append(r"\begin{itemize}\setlength{\itemsep}{0pt}" + "".join(missing) + r"\end{itemize}")
 
     # 11. Methods -------------------------------------------------------------
     out.append(r"\section{Methods in brief}")
@@ -865,6 +912,12 @@ def main(argv=None):
                         help="pVACfuse flags FFPM below this (default: 0.1)")
     parser.add_argument("--rna-support-summary", type=Path)
     parser.add_argument("--rna-support-figure", type=Path)
+    # Figures are drawn by bin/report_figures.py and arrive here as files,
+    # so each can be regenerated and checked without building the report.
+    parser.add_argument("--candidate-figure", type=Path, help="candidate landscape from report_figures.py")
+    parser.add_argument("--flag-figure", type=Path, help="flag summary from report_figures.py")
+    parser.add_argument("--hla-loh-figure", type=Path, help="HLA-LOH figure from report_figures.py")
+    parser.add_argument("--hla-loh", type=Path, help="tidy HLA-LOH table from parse_hla_loh.py")
     parser.add_argument("--timepoint-label", action="append", help="RNA timepoint labels, in order")
     parser.add_argument("--project", default="")
     parser.add_argument("--diagnosis", default="Melanoma")

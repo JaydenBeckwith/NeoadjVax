@@ -96,6 +96,14 @@ A tumour evolution tree needs several regions or DNA timepoints. With one
 DNA timepoint there is nothing to build one from, so this stops at
 clusters.
 
+## The figures
+
+`bin/report_figures.py` draws the candidate landscape (cancer cell
+fraction against agretopicity, coloured by `Selection`) and the flag
+summary from this same table, and the patient report embeds them. They
+can be regenerated on their own from a finished run; see
+[`REPORT.md`](REPORT.md).
+
 ## The workbook
 
 `bin/write_workbook.py` collects whatever the run produced into one

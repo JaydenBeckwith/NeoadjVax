@@ -9,6 +9,51 @@ and skip PDF compilation with `--report_pdf false`.
 Everything here is a computational read-out for research. The report says
 so on its first page.
 
+## Where the figures come from
+
+`patient_report.py` writes LaTeX and draws nothing. Every figure is made
+by a separate script and handed to the report as a file:
+
+| figure | script | from |
+|---|---|---|
+| RNA support across timepoints | `bin/rna_support.py` | readcount VCFs, CCF tables |
+| Candidate landscape | `bin/report_figures.py` | the prioritised candidate table |
+| Flag summary | `bin/report_figures.py` | the prioritised candidate table |
+| HLA loss of heterozygosity | `bin/report_figures.py` | the tidy SpecHLA table |
+
+That split is the point: a figure can be regenerated from an existing
+results directory and looked at on its own, without pdflatex or the rest
+of the report, and the data behind each one is a plain function that is
+tested without matplotlib installed at all.
+
+```bash
+# redraw one patient's prediction figures from results already on disk
+python bin/report_figures.py --prefix /tmp/P1     --prioritized results/P1/prioritized/P1.Combined.aggregated.ccf.expression.prioritized.tsv     --hla-loh results/P1/hla_loh/P1.hla_loh.tsv
+
+# just one of them, PNG only, while iterating on how it looks
+python bin/report_figures.py --prefix /tmp/P1 --only candidates --format png     --prioritized results/P1/prioritized/P1.Combined.aggregated.ccf.expression.prioritized.tsv
+```
+
+Each is written as `.png` for looking at and `.pdf` for the report, and
+each is skipped when its input table is absent. Turn the whole step off
+with `--report_figures false`; the report then renders without them.
+
+**Candidate landscape.** Cancer cell fraction against agretopicity
+(IC50 mutant / wild type), coloured by what prioritisation decided and
+sized by expression. The y axis is inverted, so the candidates worth
+making are top right: clonal, and binding far better than their wild
+type. It is the one figure that shows *why* the ranking came out as it
+did rather than only what it decided.
+
+**Flag summary.** How many candidates carry each flag, rejections in red
+and cautions in amber. A patient losing everything to `HLA_LOST` is a
+different problem from one losing everything to `NO_EXPRESSION`.
+
+**HLA loss of heterozygosity.** One row per locus, coloured by call, with
+the alleles written out. When this table is present the report's HLA
+section reports the real calls instead of saying allele-specific LOH was
+not assessed.
+
 ## 1. RNA support across timepoints (`bin/rna_support.py`)
 
 The single-patient version of the cohort figure of RNA support for clonal
