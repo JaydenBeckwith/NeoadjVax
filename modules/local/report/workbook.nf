@@ -75,8 +75,8 @@ process WORKBOOK {
 
     stub:
     """
-    # A real .xlsx is a zip, so the stub writes an empty one rather than
-    # a text file pretending to be a workbook.
-    python3 -c "import zipfile; zipfile.ZipFile('${meta.id}.xlsx', 'w').close()"
+    # Empty rather than a text file pretending to be a workbook: a real
+    # .xlsx is a zip, and the smoke test only checks that it was produced.
+    touch ${meta.id}.xlsx
     """
 }

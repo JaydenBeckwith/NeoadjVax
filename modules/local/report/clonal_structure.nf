@@ -40,7 +40,7 @@ process CLONAL_STRUCTURE {
         --prefix ${meta.id} \\
         --gap ${params.clonal_gap} \\
         --min-cluster ${params.clonal_min_cluster} \\
-        --clonal-ccf ${params.clonal_ccf} \\
+        --clonal-ccf ${params.clonal_cluster_ccf} \\
         --min-rna-depth ${params.priority_min_rna_depth} \\
         ${plot}
     """

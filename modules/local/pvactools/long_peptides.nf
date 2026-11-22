@@ -75,6 +75,8 @@ process DESIGN_LONG_PEPTIDES {
             --min-flank ${params.long_peptide_min_flank} \\
             --bad-nterm '${params.long_peptide_bad_nterm}' \\
             --bad-cterm '${params.long_peptide_bad_cterm}' \\
+            --max-gravy ${params.long_peptide_max_gravy} \\
+            --max-run ${params.long_peptide_max_run} \\
             ${top} \\
             -o "${meta.id}.\${mhc_class}.long_peptides.tsv" \\
             --fasta-out "${meta.id}.\${mhc_class}.long_peptides.fasta"

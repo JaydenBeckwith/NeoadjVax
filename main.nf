@@ -7,12 +7,15 @@
  *   tumour + normal DNA (FASTQ or BAM)
  *     ─> PREPROCESS_DNA     QC, trim, BWA-MEM, MarkDuplicates, BQSR
  *     ─> SOMATIC_CALLING    Mutect2 + orientation + contamination, FilterMutectCalls, PASS
- *     ─> HLA_TYPING         HLA-HD on the normal (or samplesheet hla_alleles)
+ *     ─> HLA_TYPING         HLA-HD on the normal (or samplesheet hla_alleles), SpecHLA LOH read in
  *     ─> PROXIMAL_VARIANTS  germline near somatic sites, WhatsHap phasing, VEP
  *     ─> NEOANTIGENS        VEP, bam-readcount (DNA + optional RNA), pVACseq (Sequenza purity), CCF (ploidy/CN)
- *     ─> EXPRESSION         optional: featureCounts TPM, GTEx/TCGA context, presentation-machinery and driver panel
+ *     ─> EXPRESSION         optional: featureCounts TPM, GTEx/TCGA context, presentation-machinery and driver panel, shared antigens
  *     ─> FUSION             optional: STAR-Fusion on baseline RNA FASTQ, AGFusion, pVACfuse
- *     ─> REPORT             RNA support of variants/neoantigens per timepoint, melanoma patient report (LaTeX/PDF)
+ *     ─> PRIORITIZE         one ranked list per MHC class: LOH, clonality, expression, agretopicity as flags with reasons
+ *     ─> LONG_PEPTIDES      mutant protein context, 25mers to order, optional pVACvector construct
+ *     ─> CLONAL_STRUCTURE   CCF clusters and week 6 persistence
+ *     ─> REPORT             RNA support of variants/neoantigens per timepoint, melanoma patient report (LaTeX/PDF), per-patient workbook
  *
  * One samplesheet row per patient: see assets/samplesheet_schema.md, and
  * docs/ARCHITECTURE.md for why each step is there.

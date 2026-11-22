@@ -204,7 +204,51 @@ candidates.
 Published: `<id>/fusion/star_fusion/`, `<id>/fusion/agfusion/`,
 `<id>/pvacfuse/`.
 
-## 8. REPORT (`workflows/report.nf`, on by default)
+## 8. PRIORITIZE (`modules/local/pvactools/prioritize.nf`, on by default)
+
+See [`PRIORITISATION.md`](PRIORITISATION.md).
+
+Runs last on the candidate tables, on the expression-annotated ones where
+step 6 ran and the CCF ones otherwise, joined with the patient's HLA-LOH
+table where the samplesheet gave one. `bin/prioritize_candidates.py`
+applies every criterion once and records what failed: `HLA_LOST`,
+`LOW_BINDING`, `NO_EXPRESSION` and `NO_RNA_SUPPORT` reject a candidate;
+`SELF_LIKE`, `SUBCLONAL`, `NORMAL_TISSUE`, the thin-evidence flags and the
+missing-data flags are cautions. It also adds `Agretopicity` (IC50 MT/WT)
+and `DAI`, which nothing upstream computes. Nothing is dropped: the order
+is a documented sort and every row keeps its rank, flags and reason.
+
+Published: `<id>/prioritized/`.
+
+## 9. LONG_PEPTIDES (`modules/local/pvactools/long_peptides.nf`, on by default)
+
+See [`LONG_PEPTIDES.md`](LONG_PEPTIDES.md).
+
+`pvacseq generate_protein_fasta` regenerates the mutant protein context
+from the same VCF and phasing pVACseq used, since no candidate table
+carries flanking sequence. `bin/design_long_peptides.py` then places a
+window of up to `--long_peptide_max_length` on each ranked candidate,
+locating the mutation by comparing each MT/WT pair rather than by parsing
+fasta headers, anchoring frameshifts at the junction, trimming awkward
+termini while the mutation keeps its flanks, and merging neighbouring
+mutations that fall inside one window. With `--vaccine_vector true`,
+pVACvector orders the result into a string-of-beads construct.
+
+Published: `<id>/long_peptides/`, `<id>/vaccine_vector/`.
+
+## 10. CLONAL_STRUCTURE (`modules/local/report/clonal_structure.nf`, on by default)
+
+`bin/clonal_structure.py` cuts the sorted CCFs into clusters wherever
+consecutive values are more than `--clonal_gap` apart, merges clusters
+below `--clonal_min_cluster` variants into their nearest neighbour, and
+reports for each cluster how many of its variants are still detected in
+the week 6 RNA. `not_detected` (covered, no variant reads) is kept
+distinct from `no_coverage`. No tree: that needs several regions or DNA
+timepoints.
+
+Published: `<id>/clonal_structure/`.
+
+## 11. REPORT (`workflows/report.nf`, on by default)
 
 See [`REPORT.md`](REPORT.md).
 
@@ -241,8 +285,15 @@ Published: `<id>/report/<id>.report.{tex,pdf}`,
   arrives as extra columns afterwards instead.
 - No cross-timepoint expression change: week 6 TPM is published but not
   compared to baseline.
-- No HLA-LOH and no in-pipeline Sequenza; purity, ploidy and segments
-  come from existing Sequenza runs.
+- No in-pipeline Sequenza and no in-pipeline SpecHLA; purity, ploidy,
+  segments and the HLA-LOH result come from existing runs through the
+  samplesheet.
+- No tumour evolution tree: one DNA timepoint gives CCF clusters, not a
+  phylogeny.
+- No immunopeptidomics: nothing here checks by mass spectrometry that a
+  predicted peptide is actually presented.
+- No consensus variant calling: Mutect2 with a panel of normals and the
+  read-orientation model is the only caller.
 - One FASTQ pair per sample.
 - Tests check wiring (stubbed runs, unit tests on the helper scripts),
   never biological accuracy. No real-patient run yet.

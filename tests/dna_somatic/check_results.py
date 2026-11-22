@@ -63,6 +63,15 @@ def check(manifest, trace, outdir):
         "FUSION:AGFUSION": len(fusion),
         "FUSION:PVACFUSE": len(fusion),
         # RNA support only where there is RNA; a report (and PDF) for everyone
+        "HLA_TYPING:PARSE_HLA_LOH": len(manifest.get("hla_loh_patients", [])),
+        "EXPRESSION:TAA_REPORT": patients,
+        "PRIORITIZE": patients,
+        "GENERATE_PROTEIN_FASTA": patients,
+        "DESIGN_LONG_PEPTIDES": patients,
+        "CLONAL_STRUCTURE": patients,
+        "WORKBOOK": patients,
+        "PVACVECTOR": patients,
+        "PVACBIND": patients,
         "REPORT:RNA_SUPPORT": sum(1 for timepoints in rna.values() if timepoints),
         "REPORT:PATIENT_REPORT": patients,
         "REPORT:REPORT_PDF": patients,
@@ -82,7 +91,17 @@ def check(manifest, trace, outdir):
             outdir / patient / "gene_panel" / f"{patient}.gene_panel.tsv",
             outdir / patient / "report" / f"{patient}.report.tex",
             outdir / patient / "report" / f"{patient}.report.pdf",
+            outdir / patient / "prioritized" / f"{patient}.Combined.prioritized.tsv",
+            outdir / patient / "long_peptides" / f"{patient}.protein.fasta",
+            outdir / patient / "long_peptides" / f"{patient}.Combined.long_peptides.tsv",
+            outdir / patient / "clonal_structure" / f"{patient}.clonal_structure.tsv",
+            outdir / patient / "taa" / f"{patient}.taa.tsv",
+            outdir / patient / "taa" / "pvacbind" / "stub.log",
+            outdir / patient / "vaccine_vector" / "pvacvector" / "stub.log",
+            outdir / patient / f"{patient}.xlsx",
         ]
+        if patient in manifest.get("hla_loh_patients", []):
+            paths.append(outdir / patient / "hla_loh" / f"{patient}.hla_loh.tsv")
         if rna.get(patient):
             paths.append(outdir / patient / "report" / f"{patient}.rna_support.summary.tsv")
             paths.append(outdir / patient / "report" / f"{patient}.rna_support.pdf")
