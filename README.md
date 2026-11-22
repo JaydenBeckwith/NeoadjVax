@@ -41,6 +41,11 @@ Sequenza and SpecHLA are not run here: purity, ploidy, the segments file
 and the HLA-LOH result come in through the samplesheet from your existing
 runs.
 
+`--run` picks which analyses happen — `all` (the default), `somatic`,
+`fusion`, `markers`, or a comma-separated combination. Alignment, HLA
+typing, HLA-LOH and the Sequenza values always run whatever you choose.
+See [`docs/RUNNING.md`](docs/RUNNING.md).
+
 ## Quick start
 
 ```bash
@@ -68,6 +73,7 @@ nextflow run main.nf -profile gadi \
 
 ## Documentation
 
+- [`docs/RUNNING.md`](docs/RUNNING.md): `--run` — choosing which analyses a run does, and the peptide lengths.
 - [`assets/samplesheet_schema.md`](assets/samplesheet_schema.md): the samplesheet, including purity, ploidy and segments.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): each step, why it is there, and the outputs.
 - [`docs/EXPRESSION.md`](docs/EXPRESSION.md): the optional GTEx/TCGA expression step and the presentation-machinery/driver panel, and building the reference tables.

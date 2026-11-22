@@ -441,7 +441,12 @@ PREAMBLE = r"""\documentclass[10pt]{article}
 
 
 def build_report(args):
-    variants = [v for v in rs.read_vcf(args.vcf) if v["filter"] in ("PASS", ".")]
+    # --vcf is absent when the run did not include somatic calling (see
+    # --run in docs/RUNNING.md). Everything derived from variants is then
+    # reported as not assessed rather than as zero, which would read as a
+    # tumour with no mutations.
+    somatic_assessed = args.vcf is not None
+    variants = [v for v in rs.read_vcf(args.vcf) if v["filter"] in ("PASS", ".")] if somatic_assessed else []
     segments = annotate_ccf.read_segments(args.segments) if args.segments else None
     ccfs = {}
     for v in variants:
@@ -449,12 +454,12 @@ def build_report(args):
             v["dna_vaf"], v["chrom"], v["pos"], args.purity, args.ploidy, args.sex, segments)[-1])
     non_syn = [v for v in variants if rs.is_non_synonymous(v["csq"])]
     fasta = Fasta(args.fasta, args.fai) if args.fasta else None
-    uv = uv_signature(variants, fasta)
+    uv = uv_signature(variants, fasta) if somatic_assessed else None
     if fasta:
         fasta.close()
     size_mb, size_basis = callable_mb(args)
-    tmb = len(variants) / size_mb if size_mb else None
-    tmb_ns = len(non_syn) / size_mb if size_mb else None
+    tmb = len(variants) / size_mb if (size_mb and somatic_assessed) else None
+    tmb_ns = len(non_syn) / size_mb if (size_mb and somatic_assessed) else None
 
     panel_rows = read_tsv(args.gene_panel)
     panel_by_gene = {r["Gene"]: r for r in panel_rows}
@@ -498,11 +503,13 @@ def build_report(args):
         ("Sex", tex(args.sex or "NA")),
         ("Genomic subtype (TCGA SKCM)", rf"\textbf{{{tex(subtype)}}}"),
         ("BRAF status", tex(braf_status)),
-        ("PASS somatic variants / non-synonymous", f"{len(variants)} / {len(non_syn)}"),
+        ("PASS somatic variants / non-synonymous",
+         f"{len(variants)} / {len(non_syn)}" if somatic_assessed else "NA (somatic calling not run)"),
         ("TMB (all PASS, mut/Mb)", (rf"\textbf{{{num(tmb)}}}" + (r" \textcolor{FAIL}{TMB-high}" if tmb >= TMB_HIGH else ""))
          if tmb is not None else "NA"),
         ("Clonal non-synonymous (CCF $\\geq$ " + f"{args.clonal_ccf:g})", f"{clonal_ns} of {len(ns_ccf)}" if ns_ccf else "NA"),
-        ("UV signature (C>T of SNVs)", f"{100 * uv['ct_fraction']:.0f}\\%" if uv["ct_fraction"] is not None else "NA"),
+        ("UV signature (C>T of SNVs)",
+         f"{100 * uv['ct_fraction']:.0f}\\%" if uv and uv["ct_fraction"] is not None else "NA"),
         ("HLA class I alleles", tex(", ".join(class_i) or "NA")),
         ("Gene-level HLA / B2M copy loss or LOH", tex(", ".join(hla_loh_genes) if hla_loh_genes else
                                                       ("none" if panel_rows else "NA (no gene panel)"))),
@@ -603,39 +610,44 @@ def build_report(args):
 
     # 5. Variants, TMB, clonality --------------------------------------------
     out.append(r"\section{Somatic variants, mutational burden and clonality}")
-    classes = {}
-    for v in variants:
-        classes[variant_class(v)] = classes.get(variant_class(v), 0) + 1
-    consequences = {}
-    for v in variants:
-        c = ((v["csq"] or {}).get("Consequence") or "no_annotation").split("&")[0]
-        consequences[c] = consequences.get(c, 0) + 1
-    out.append(table(["Variant class", "n", "%"],
-                     [[tex(k), str(n), f"{100 * n / len(variants):.1f}"] for k, n in sorted(classes.items())] or [["none", "0", "-"]],
-                     spec="lrr", caption="PASS somatic variants by class"))
-    top_consequences = sorted(consequences.items(), key=lambda kv: -kv[1])[:12]
-    out.append(table(["Consequence (canonical transcript)", "n"], [[tex(k), str(n)] for k, n in top_consequences] or [["none", "0"]],
-                     spec="lr", size=r"\small", caption="Most frequent consequences"))
-    tmb_line = (f"TMB is {num(tmb)} mut/Mb over all PASS variants and {num(tmb_ns)} non-synonymous mut/Mb, "
-                f"over {num(size_mb, 1)} Mb ({tex(size_basis)}). ") if tmb is not None else \
-        f"TMB not computed: {tex(size_basis)}. "
-    out.append(tmb_line + f"The usual TMB-high line is {TMB_HIGH:g} mut/Mb; panel and exome TMB differ, so "
-               "compare within one assay.\n")
-    uv_bits = [f"{uv['ct']} of {uv['snvs']} SNVs are C>T"]
-    if uv["dipyrimidine_fraction"] is not None:
-        uv_bits.append(f"{100 * uv['dipyrimidine_fraction']:.0f}\\% of those at a dipyrimidine")
-    uv_bits.append(f"{uv['cc_tt']} CC>TT doublets")
-    out.append("UV signature: " + ", ".join(uv_bits) + ". A dominant C>T share at dipyrimidines with CC>TT "
-               "doublets marks a UV-driven (cutaneous) melanoma; acral and mucosal melanomas lack it and carry "
-               "fewer mutations.\n")
-    if ns_ccf:
-        out.append(rf"Cancer cell fraction of the non-synonymous variants (purity {num(args.purity)}, "
-                   rf"ploidy {num(args.ploidy) if args.ploidy else 'NA'}, "
-                   rf"{'Sequenza segments' if segments else 'no segments'}): {clonal_ns} of {len(ns_ccf)} clonal "
-                   rf"at CCF $\geq$ {args.clonal_ccf:g}. Point estimates without confidence intervals." + "\n")
-        out.append(table(["CCF", "n", ""], [[a, str(b), c] for a, b, c in
-                                           histogram_rows(ns_ccf, [0, 0.2, 0.4, 0.6, 0.8, 1.0])],
-                         spec="lrl", size=r"\small", caption="CCF distribution, non-synonymous variants"))
+    if not somatic_assessed:
+        out.append(not_available(
+            "Somatic calling was not part of this run, so variant counts, TMB, the UV signature and "
+            "clonality were not assessed. Rerun including the somatic analysis to fill this section."))
+    else:
+        classes = {}
+        for v in variants:
+            classes[variant_class(v)] = classes.get(variant_class(v), 0) + 1
+        consequences = {}
+        for v in variants:
+            c = ((v["csq"] or {}).get("Consequence") or "no_annotation").split("&")[0]
+            consequences[c] = consequences.get(c, 0) + 1
+        out.append(table(["Variant class", "n", "%"],
+                         [[tex(k), str(n), f"{100 * n / len(variants):.1f}"] for k, n in sorted(classes.items())] or [["none", "0", "-"]],
+                         spec="lrr", caption="PASS somatic variants by class"))
+        top_consequences = sorted(consequences.items(), key=lambda kv: -kv[1])[:12]
+        out.append(table(["Consequence (canonical transcript)", "n"], [[tex(k), str(n)] for k, n in top_consequences] or [["none", "0"]],
+                         spec="lr", size=r"\small", caption="Most frequent consequences"))
+        tmb_line = (f"TMB is {num(tmb)} mut/Mb over all PASS variants and {num(tmb_ns)} non-synonymous mut/Mb, "
+                    f"over {num(size_mb, 1)} Mb ({tex(size_basis)}). ") if tmb is not None else \
+            f"TMB not computed: {tex(size_basis)}. "
+        out.append(tmb_line + f"The usual TMB-high line is {TMB_HIGH:g} mut/Mb; panel and exome TMB differ, so "
+                   "compare within one assay.\n")
+        uv_bits = [f"{uv['ct']} of {uv['snvs']} SNVs are C>T"]
+        if uv["dipyrimidine_fraction"] is not None:
+            uv_bits.append(f"{100 * uv['dipyrimidine_fraction']:.0f}\\% of those at a dipyrimidine")
+        uv_bits.append(f"{uv['cc_tt']} CC>TT doublets")
+        out.append("UV signature: " + ", ".join(uv_bits) + ". A dominant C>T share at dipyrimidines with CC>TT "
+                   "doublets marks a UV-driven (cutaneous) melanoma; acral and mucosal melanomas lack it and carry "
+                   "fewer mutations.\n")
+        if ns_ccf:
+            out.append(rf"Cancer cell fraction of the non-synonymous variants (purity {num(args.purity)}, "
+                       rf"ploidy {num(args.ploidy) if args.ploidy else 'NA'}, "
+                       rf"{'Sequenza segments' if segments else 'no segments'}): {clonal_ns} of {len(ns_ccf)} clonal "
+                       rf"at CCF $\geq$ {args.clonal_ccf:g}. Point estimates without confidence intervals." + "\n")
+            out.append(table(["CCF", "n", ""], [[a, str(b), c] for a, b, c in
+                                               histogram_rows(ns_ccf, [0, 0.2, 0.4, 0.6, 0.8, 1.0])],
+                             spec="lrl", size=r"\small", caption="CCF distribution, non-synonymous variants"))
 
     # 6. RNA support ----------------------------------------------------------
     out.append(r"\section{RNA support across timepoints}")
@@ -828,7 +840,9 @@ def build_report(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--patient", required=True)
-    parser.add_argument("--vcf", type=Path, required=True, help="VEP + readcount annotated somatic VCF")
+    parser.add_argument("--vcf", type=Path,
+                        help="VEP + readcount annotated somatic VCF. Omit when the run did not include "
+                             "somatic calling: the variant, TMB, UV and clonality sections then say so.")
     parser.add_argument("--purity", type=float, required=True)
     parser.add_argument("--ploidy", type=float)
     parser.add_argument("--sex", type=str.lower, choices=["male", "female"])

@@ -74,6 +74,9 @@ process PATIENT_REPORT {
     tuple val(meta), path("${meta.id}.report.tex"), emit: tex
 
     script:
+    // No VCF means the run did not include somatic calling; the variant,
+    // TMB, UV and clonality sections then say they were not assessed.
+    def vcf_arg      = readcounts_vcf ? "--vcf ${readcounts_vcf}" : ''
     def ploidy_arg   = ploidy      ? "--ploidy ${ploidy}" : ''
     def sex_arg      = sex         ? "--sex ${sex}" : ''
     def segments_arg = segments    ? "--segments ${segments}" : ''
@@ -98,7 +101,7 @@ process PATIENT_REPORT {
     class_ii=\$(pick MHC_II)
     patient_report.py \\
         --patient ${meta.id} \\
-        --vcf ${readcounts_vcf} \\
+        ${vcf_arg} \\
         --hla '${hla_alleles}' \\
         --purity ${purity} ${ploidy_arg} ${sex_arg} ${segments_arg} \\
         --fasta ${fasta} --fai ${fasta_fai} \\

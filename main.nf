@@ -17,6 +17,10 @@
  *     ─> CLONAL_STRUCTURE   CCF clusters and week 6 persistence
  *     ─> REPORT             RNA support of variants/neoantigens per timepoint, melanoma patient report (LaTeX/PDF), per-patient workbook
  *
+ * --run picks which of these happen: all (default), somatic, fusion,
+ * markers, or a comma-separated combination. Alignment, HLA typing, the
+ * HLA-LOH result and the Sequenza values always run. See docs/RUNNING.md.
+ *
  * One samplesheet row per patient: see assets/samplesheet_schema.md, and
  * docs/ARCHITECTURE.md for why each step is there.
  */
@@ -131,10 +135,55 @@ def requireParam(name) {
     params[name]
 }
 
+// ---------------------------------------------------------------------
+// --run: which analyses this run should do. The core always runs, because
+// it is cheap and every read-out depends on it: alignment, HLA typing,
+// the HLA-LOH result read from the samplesheet, and the Sequenza purity,
+// ploidy and segments that come in with it.
+//
+//   somatic   SNV/indel neoantigens: calling, phasing, pVACseq, CCF,
+//             prioritisation, long peptides, clonal structure
+//   fusion    fusion neoantigens: STAR-Fusion, AGFusion, pVACfuse
+//   markers   expression: TPM, GTEx/TCGA context, presentation-machinery
+//             and driver panel, shared tumour antigens
+//   all       every analysis whose reference data this run was given
+//
+// Several can be combined: --run somatic,markers.
+// ---------------------------------------------------------------------
+def ANALYSES = ['somatic', 'fusion', 'markers']
+
+def parseAnalyses(spec) {
+    def requested = (spec ?: 'all').toString().toLowerCase().tokenize(',; ')*.trim().findAll { it }
+    if (!requested) error "--run is empty: give one or more of ${ANALYSES.join(', ')}, or 'all'"
+    def unknown = requested.findAll { !(it in ANALYSES + ['all', 'none']) }
+    if (unknown) error "--run: unknown analysis ${unknown.join(', ')}. Choose from: ${(ANALYSES + ['all']).join(', ')}"
+    if ('none' in requested && requested.size() > 1) error "--run none cannot be combined with another analysis"
+    if ('all' in requested) return ANALYSES as Set
+    (requested - ['none']) as Set
+}
+
 workflow {
 
     rows = validateSamplesheet(requireParam('samplesheet'))
     samples_ch = Channel.fromList(rows)
+
+    // ---- which analyses this run does (see --run above) ----
+    def analyses = parseAnalyses(params.run)
+    def named = (params.run ?: '').toString().toLowerCase().tokenize(',; ')*.trim()
+    def run_somatic = 'somatic' in analyses
+    def run_markers = 'markers' in analyses
+
+    // --fusion still wins where it is set, so existing params files keep
+    // working. Otherwise --run decides; and a fusion branch that comes
+    // from 'all' rather than being asked for by name is skipped when its
+    // reference data is not actually on this machine, because 'all' means
+    // every analysis this run was given the data for.
+    def run_fusion = params.fusion != null ? (params.fusion as boolean) : ('fusion' in analyses)
+    if (run_fusion && params.fusion == null && !('fusion' in named) &&
+        !(params.agfusion_db && file(params.agfusion_db).exists())) {
+        log.warn "--run all: skipping the fusion branch, because --agfusion_db does not exist (${params.agfusion_db}). Ask for it by name (--run fusion) to make this an error instead"
+        run_fusion = false
+    }
 
     // ---- reference files: reuse indexes found beside the FASTA ----
     def fasta_path = requireParam('genome_fasta')
@@ -167,10 +216,10 @@ workflow {
     // ---- optional fusion branch: the AGFusion DB, its pyensembl cache and
     //      the CTAT lib are checked here, because compute nodes are offline
     //      and AGFusion would otherwise try to download a missing cache ----
-    def fusion_rows = params.fusion ? rows.findAll { it.rna_baseline_r1 || it.starfusion_tsv } : []
+    def fusion_rows = run_fusion ? rows.findAll { it.rna_baseline_r1 || it.starfusion_tsv } : []
     agfusion_db = []
     ctat_genome_lib = []
-    if (params.fusion) {
+    if (run_fusion) {
         if (!fusion_rows) log.warn "--fusion: no samplesheet row has rna_baseline_r1/_r2 or starfusion_tsv, so no fusions will be called"
         agfusion_db = file(requireParam('agfusion_db'), checkIfExists: true)
         def db_name = agfusion_db.name =~ /^agfusion\.homo_sapiens\.(\d+)\.db$/
@@ -193,11 +242,18 @@ workflow {
             }
         }
     } else if (rows.any { it.rna_baseline_r1 || it.starfusion_tsv }) {
-        log.warn "Samplesheet has fusion inputs (rna_baseline_r1/_r2 or starfusion_tsv) but --fusion is false: ignoring them"
+        log.warn "Samplesheet has fusion inputs (rna_baseline_r1/_r2 or starfusion_tsv) but the fusion analysis is not selected: ignoring them"
     }
 
-    if (!params.panel_of_normals) log.warn "No --panel_of_normals: Mutect2 will run without a PoN, so recurrent artefacts are not filtered"
-    if (!params.contamination_sites) log.warn "No --contamination_sites: skipping GetPileupSummaries/CalculateContamination"
+    if (run_somatic && !params.panel_of_normals) log.warn "No --panel_of_normals: Mutect2 will run without a PoN, so recurrent artefacts are not filtered"
+    if (run_somatic && !params.contamination_sites) log.warn "No --contamination_sites: skipping GetPileupSummaries/CalculateContamination"
+
+    // Say plainly what this run will and will not do, since the answer
+    // comes from --run, --fusion and which reference data exists.
+    def selected = ANALYSES.findAll { it == 'somatic' ? run_somatic : it == 'fusion' ? run_fusion : run_markers }
+    log.info "NeoadjVax analyses: ${selected ? selected.join(', ') : 'core only'} " +
+             "(always: alignment, HLA typing, HLA-LOH and Sequenza values from the samplesheet)"
+    if (!run_somatic) log.info "Somatic neoantigens are not part of this run: no Mutect2, pVACseq, prioritisation or long peptides"
 
     // ---- per-patient clinical inputs, kept out of meta so editing a
     //      purity value does not invalidate the cached alignment ----
@@ -223,16 +279,35 @@ workflow {
     tumor_bam_ch  = bams_ch.filter { it[1] == 'tumor' }.map { meta, st, bam, bai -> tuple(meta, bam, bai) }
     normal_bam_ch = bams_ch.filter { it[1] == 'normal' }.map { meta, st, bam, bai -> tuple(meta, bam, bai) }
 
-    SOMATIC_CALLING(tumor_bam_ch.join(normal_bam_ch), bams_ch, fasta, fai, dict,
-                    germline_resource, pon_files, common_sites, target_intervals)
-
+    // HLA typing and the HLA-LOH result are core: every analysis and every
+    // read-out below depends on knowing the alleles and whether they are
+    // still there.
     HLA_TYPING(samples_ch, normal_bam_ch)
 
-    PROXIMAL_VARIANTS(SOMATIC_CALLING.out.pass_vcf, tumor_bam_ch, normal_bam_ch,
-                      fasta, fai, dict, vep_cache, vep_plugins)
+    // Everything the somatic analysis produces, empty when it is not
+    // selected, so each consumer below joins on the same channels either
+    // way rather than being written twice.
+    ccf_ch = Channel.empty()
+    vep_vcf_ch = Channel.empty()
+    readcounts_vcf_ch = Channel.empty()
+    week6_vcf_ch = Channel.empty()
+    phased_vcf_ch = Channel.empty()
+    if (run_somatic) {
+        SOMATIC_CALLING(tumor_bam_ch.join(normal_bam_ch), bams_ch, fasta, fai, dict,
+                        germline_resource, pon_files, common_sites, target_intervals)
 
-    NEOANTIGENS(SOMATIC_CALLING.out.pass_vcf, bams_ch, PROXIMAL_VARIANTS.out.phased_vcf,
-                HLA_TYPING.out.alleles, clinical_ch, rna_ch, fasta, fai, vep_cache, vep_plugins)
+        PROXIMAL_VARIANTS(SOMATIC_CALLING.out.pass_vcf, tumor_bam_ch, normal_bam_ch,
+                          fasta, fai, dict, vep_cache, vep_plugins)
+
+        NEOANTIGENS(SOMATIC_CALLING.out.pass_vcf, bams_ch, PROXIMAL_VARIANTS.out.phased_vcf,
+                    HLA_TYPING.out.alleles, clinical_ch, rna_ch, fasta, fai, vep_cache, vep_plugins)
+
+        ccf_ch = NEOANTIGENS.out.ccf
+        vep_vcf_ch = NEOANTIGENS.out.vep_vcf
+        readcounts_vcf_ch = NEOANTIGENS.out.readcounts_vcf
+        week6_vcf_ch = NEOANTIGENS.out.rna_week6_vcf
+        phased_vcf_ch = PROXIMAL_VARIANTS.out.phased_vcf
+    }
 
     // Expression context runs when there is anything to compare against:
     // a reference table, or the patient's own RNA with a GTF to count it
@@ -241,10 +316,17 @@ workflow {
     expression_ch = Channel.empty()
     panel_ch = Channel.empty()
     taa_ch = Channel.empty()
-    if (gtex_db || tcga_db || rna_gtf) {
+    def markers_possible = (gtex_db || tcga_db || rna_gtf) as boolean
+    if (run_markers && !markers_possible && 'markers' in named) {
+        error "--run markers: nothing to compare against. Give --gtex_db, --tcga_db, or --rna_gtf with an RNA BAM"
+    }
+    if (run_markers && !markers_possible) {
+        log.warn "Skipping expression, the gene panel and shared antigens: none of --gtex_db, --tcga_db or --rna_gtf is set"
+    }
+    if (run_markers && markers_possible) {
         if (!rna_gtf) log.warn "No --rna_gtf: skipping RNA quantification, so expression context comes from the reference tables only"
         if (!(gtex_db || tcga_db)) log.warn "No --gtex_db or --tcga_db: expression comes from this patient's RNA alone, with no normal-tissue or cohort context"
-        EXPRESSION(rna_ch, NEOANTIGENS.out.ccf, NEOANTIGENS.out.vep_vcf, clinical_ch,
+        EXPRESSION(rna_ch, ccf_ch, vep_vcf_ch, clinical_ch,
                    rna_gtf, gtex_db, tcga_db)
         expression_ch = EXPRESSION.out.annotated
         panel_ch = EXPRESSION.out.panel
@@ -262,53 +344,66 @@ workflow {
     // produced: the expression-annotated tables when EXPRESSION ran,
     // otherwise the CCF tables. HLA-LOH joins in for the patients that
     // have it (remainder: true keeps the rest, with no LOH column).
-    prioritize_in_ch = (gtex_db || tcga_db || rna_gtf ? expression_ch : NEOANTIGENS.out.ccf)
-        .join(HLA_TYPING.out.loh, remainder: true)
-        .filter { it[1] != null }
-        .map { it[-1] == null ? it[0..-2] + [[]] : it }
-    PRIORITIZE(prioritize_in_ch)
+    // The candidate tables everything downstream reads: the
+    // expression-annotated ones where EXPRESSION ran, otherwise the CCF
+    // ones, and nothing at all without the somatic analysis.
+    candidates_ch = (run_markers && markers_possible) ? expression_ch : ccf_ch
 
-    // Long peptides for the ranked candidates. The flanking sequence is in
-    // no table, so pVACtools regenerates the mutant protein context from
-    // the same VCF pVACseq read, with the same phasing.
+    prioritized_ch = Channel.empty()
     long_peptides_ch = Channel.empty()
-    if (params.long_peptides) {
-        GENERATE_PROTEIN_FASTA(NEOANTIGENS.out.readcounts_vcf.join(PROXIMAL_VARIANTS.out.phased_vcf))
-        DESIGN_LONG_PEPTIDES(PRIORITIZE.out.tsv.join(GENERATE_PROTEIN_FASTA.out.fasta))
-        long_peptides_ch = DESIGN_LONG_PEPTIDES.out.tsv
+    clonal_ch = Channel.empty()
+    if (run_somatic) {
+        prioritize_in_ch = candidates_ch
+            .join(HLA_TYPING.out.loh, remainder: true)
+            .filter { it[1] != null }
+            .map { it[-1] == null ? it[0..-2] + [[]] : it }
+        PRIORITIZE(prioritize_in_ch)
+        prioritized_ch = PRIORITIZE.out.tsv
 
-        // One string-of-beads construct per patient, from the Combined
-        // peptide set where there is one (both MHC classes), else whatever
-        // single class the run produced.
-        if (params.vaccine_vector) {
-            PVACVECTOR(DESIGN_LONG_PEPTIDES.out.fasta
-                .map { meta, fastas ->
-                    def list = fastas instanceof List ? fastas : [fastas]
-                    tuple(meta, list.find { it.name.contains('Combined') } ?: list.sort { it.name }.first())
-                }
-                .join(HLA_TYPING.out.alleles))
+        // Long peptides for the ranked candidates. The flanking sequence
+        // is in no table, so pVACtools regenerates the mutant protein
+        // context from the same VCF pVACseq read, with the same phasing.
+        if (params.long_peptides) {
+            GENERATE_PROTEIN_FASTA(readcounts_vcf_ch.join(phased_vcf_ch))
+            DESIGN_LONG_PEPTIDES(PRIORITIZE.out.tsv.join(GENERATE_PROTEIN_FASTA.out.fasta))
+            long_peptides_ch = DESIGN_LONG_PEPTIDES.out.tsv
+
+            // One string-of-beads construct per patient, from the Combined
+            // peptide set where there is one (both MHC classes), else
+            // whatever single class the run produced.
+            if (params.vaccine_vector) {
+                PVACVECTOR(DESIGN_LONG_PEPTIDES.out.fasta
+                    .map { meta, fastas ->
+                        def list = fastas instanceof List ? fastas : [fastas]
+                        tuple(meta, list.find { it.name.contains('Combined') } ?: list.sort { it.name }.first())
+                    }
+                    .join(HLA_TYPING.out.alleles))
+            }
+        }
+
+        // Clonal clusters, and which survived to week 6 in the RNA.
+        if (params.clonal_structure) {
+            CLONAL_STRUCTURE(PRIORITIZE.out.tsv)
+            clonal_ch = CLONAL_STRUCTURE.out.clusters
         }
     }
 
-    // Clonal clusters, and which survived to week 6 in the RNA.
-    clonal_ch = Channel.empty()
-    if (params.clonal_structure) {
-        CLONAL_STRUCTURE(PRIORITIZE.out.tsv)
-        clonal_ch = CLONAL_STRUCTURE.out.clusters
-    }
-
-    // One spreadsheet per patient, from whatever the run produced. Each
-    // optional table joins with remainder: true and arrives as [] when
-    // the patient has none, so a DNA-only patient still gets a workbook.
+    // One spreadsheet per patient, from whatever the run produced. It is
+    // anchored on the patient rather than on any one analysis, so a
+    // markers-only run still hands over a workbook; each optional table
+    // joins with remainder: true and arrives as [] when there is none.
     if (params.workbook) {
-        workbook_in_ch = PRIORITIZE.out.tsv
+        workbook_in_ch = samples_ch.map { row -> tuple([id: row.patient_id], []) }
+            .join(prioritized_ch, remainder: true)
             .join(long_peptides_ch, remainder: true)
             .join(HLA_TYPING.out.loh, remainder: true)
             .join(panel_ch, remainder: true)
             .join(taa_ch, remainder: true)
             .join(clonal_ch, remainder: true)
             .filter { it[1] != null }
-            .map { row -> row[0..0] + row[1..-1].collect { it == null ? [] : it } }
+            // drop the anchor's placeholder, and turn every unmatched
+            // remainder (null) into "no file"
+            .map { row -> row[0..0] + row[2..-1].collect { it == null ? [] : it } }
         WORKBOOK(workbook_in_ch)
     }
 
@@ -316,7 +411,7 @@ workflow {
     // STAR-Fusion table), so most patients may have none.
     pvacfuse_ch = Channel.empty()
     fusion_calls_ch = Channel.empty()
-    if (params.fusion) {
+    if (run_fusion) {
         fusion_samples_ch = Channel.fromList(fusion_rows)
         FUSION(fusion_samples_ch
                    .filter { row -> row.rna_baseline_r1 }
@@ -329,10 +424,13 @@ workflow {
         fusion_calls_ch = FUSION.out.predictions
     }
 
-    // RNA-support figure for patients with RNA, and a report for every patient
+    // RNA-support figure for patients with RNA, and a report for every
+    // patient. It is written from whatever this run produced: without the
+    // somatic analysis the variant, TMB, UV and clonality sections say
+    // they were not assessed rather than reporting zeros.
     if (params.report) {
-        REPORT(NEOANTIGENS.out.readcounts_vcf, NEOANTIGENS.out.rna_week6_vcf, rna_ch,
-               NEOANTIGENS.out.ccf, expression_ch, panel_ch, HLA_TYPING.out.alleles, clinical_ch,
+        REPORT(readcounts_vcf_ch, week6_vcf_ch, rna_ch,
+               ccf_ch, candidates_ch, panel_ch, HLA_TYPING.out.alleles, clinical_ch,
                pvacfuse_ch, fusion_calls_ch, fasta, fai, target_intervals)
     }
 

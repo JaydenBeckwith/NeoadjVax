@@ -49,28 +49,32 @@ workflow REPORT {
         .join(clinical_ch)
     RNA_SUPPORT(support_in_ch)
 
-    // Optional inputs arrive as null after a remainder join; [] is "no file".
-    report_in_ch = vcf_ch
+    // Anchored on the clinical row, which every patient has, so a run
+    // without the somatic analysis still produces a report: the sections
+    // that need variants then say they were not assessed. Optional inputs
+    // arrive as null after a remainder join; [] is "no file". Each one is
+    // wrapped in a single-element list first, so an unmatched remainder is
+    // one null rather than a variable number of them.
+    report_in_ch = clinical_ch
         .join(hla_ch)
-        .join(clinical_ch)
-        .join(expression_ch, remainder: true)
+        .join(vcf_ch.map { meta, vcf -> tuple(meta, [vcf]) }, remainder: true)
         .filter { it[1] != null }
-        .join(ccf_ch)
-        .map { meta, vcf, hla, purity, ploidy, sex, segments, expression, ccf ->
-            tuple(meta, vcf, hla, purity, ploidy, sex, segments, expression ?: ccf) }
+        .join(expression_ch.map { meta, reports -> tuple(meta, [reports]) }, remainder: true)
+        .filter { it[1] != null }
+        .join(ccf_ch.map { meta, reports -> tuple(meta, [reports]) }, remainder: true)
+        .filter { it[1] != null }
         .join(panel_ch, remainder: true)
         .filter { it[1] != null }
-        // one value per side, so an unmatched remainder is a single null
         .join(RNA_SUPPORT.out.summary.map { meta, summary, figure -> tuple(meta, [summary, figure]) }, remainder: true)
         .filter { it[1] != null }
         .join(timepoints_ch)
-        // same single-value trick for the two optional fusion inputs
         .join(pvacfuse_ch.map { meta, dir -> tuple(meta, [dir]) }, remainder: true)
         .filter { it[1] != null }
         .join(fusion_calls_ch.map { meta, calls -> tuple(meta, [calls]) }, remainder: true)
         .filter { it[1] != null }
-        .map { meta, vcf, hla, purity, ploidy, sex, segments, reports, panel, support, tps, fusion, calls ->
-            tuple(meta, vcf, hla, purity, ploidy, sex, segments, reports, panel ?: [],
+        .map { meta, purity, ploidy, sex, segments, hla, vcf, expression, ccf, panel, support, tps, fusion, calls ->
+            tuple(meta, vcf ? vcf[0] : [], hla, purity, ploidy, sex, segments,
+                  (expression ?: ccf)?.getAt(0) ?: [], panel ?: [],
                   support ? support[0] : [], support ? support[1] : [], tps,
                   fusion ? fusion[0] : [], calls ? calls[0] : []) }
     PATIENT_REPORT(report_in_ch, fasta, fasta_fai, target_intervals)

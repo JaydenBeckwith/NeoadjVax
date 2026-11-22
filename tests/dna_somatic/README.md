@@ -24,4 +24,17 @@ python tests/dna_somatic/check_results.py \
   --outdir test-results/dna_somatic
 ```
 
+To check the `--run` selector, run the same fixture again with one analysis dropped and tell the checker what you asked for. A deselected analysis must produce no tasks and no outputs, which is as much a wiring claim as running it:
+
+```bash
+nextflow -c tests/dna_somatic/smoke.config run main.nf -stub-run --run markers \
+  -work-dir test-work/dna_somatic_markers --outdir test-results/dna_somatic_markers
+python tests/dna_somatic/check_results.py --analyses markers \
+  --manifest tests/dna_somatic/generated/manifest.json \
+  --trace test-results/dna_somatic_markers/trace.tsv \
+  --outdir test-results/dna_somatic_markers
+```
+
+(The trace path comes from `smoke.config`, so point `-c` at a copy with a different `trace.file` if you want both runs' traces side by side.)
+
 Generation requires an empty destination. Reuse an existing generated fixture with `-resume`; do not rerun the generator over it. Generated data are ignored by Git. Downstream stub BAM/VCF files are placeholders and must never be read as scientific results.

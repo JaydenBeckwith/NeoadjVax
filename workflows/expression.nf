@@ -59,13 +59,18 @@ workflow EXPRESSION {
 
     // The panel is per patient, not per candidate, so it is driven by the
     // clinical row (always present) rather than by the reports, and runs
-    // even when a patient has no RNA and no segments.
+    // even when a patient has no RNA and no segments. The somatic VCF is
+    // optional too: without it the panel loses only its mutation column,
+    // which is what a markers-only run should still get.
     panel_file = params.gene_panel ? file(params.gene_panel, checkIfExists: true) : []
-    panel_in_ch = vep_vcf_ch
-        .join(clinical_ch.map { meta, purity, ploidy, sex, segments -> tuple(meta, ploidy, segments) })
+    panel_in_ch = clinical_ch
+        .map { meta, purity, ploidy, sex, segments -> tuple(meta, ploidy, segments) }
+        .join(vep_vcf_ch.map { meta, vcf -> tuple(meta, [vcf]) }, remainder: true)
+        .filter { it[1] != null }
         .join(baseline_tpm_ch, remainder: true)
         .filter { it[1] != null }
-        .map { it[-1] == null ? it[0..-2] + [[]] : it }
+        .map { meta, ploidy, segments, vcf, tpm ->
+            tuple(meta, vcf ? vcf[0] : [], ploidy, segments, tpm == null ? [] : tpm) }
     GENE_PANEL(panel_in_ch, gtex_db, tcga_db, gtf, panel_file)
 
     // Shared antigens are a per-patient gene-level question, like the

@@ -188,6 +188,58 @@ class Report(unittest.TestCase):
         self.assertIn("RNA support was not assessed", text)
         self.assertIn("fusion branch did not run", text)
         self.assertIn("Allele-specific HLA LOH was not assessed", text)
+
+
+class ReportWithoutSomatic(unittest.TestCase):
+    """--run markers: no somatic calling, so no VCF reaches the report.
+
+    The sections built from variants have to say they were not assessed.
+    Reporting zero variants and a TMB of 0 would read as a tumour with no
+    mutations, which is a different and wrong claim.
+    """
+
+    def render(self, *extra):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            out = tmp / "r.tex"
+            pr.main(["--patient", "P1", "--purity", "0.6", "--callable-mb", "10",
+                     "-o", str(out)] + list(extra))
+            return out.read_text()
+
+    def test_it_still_renders_a_document(self):
+        text = self.render()
+        self.assertIn(r"\begin{document}", text)
+        self.assertIn(r"\end{document}", text)
+
+    def test_the_variant_section_says_it_was_not_assessed(self):
+        text = self.render()
+        self.assertIn("Somatic calling was not part of this run", text)
+
+    def test_no_tmb_is_reported(self):
+        text = self.render()
+        self.assertNotIn("TMB-high", text)
+        self.assertNotIn("mut/Mb over all PASS variants", text)
+
+    def test_variant_counts_are_not_reported_as_zero(self):
+        text = self.render()
+        self.assertIn("NA (somatic calling not run)", text)
+        self.assertNotIn("PASS somatic variants by class", text)
+
+    def test_the_gene_panel_still_renders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            panel = tmp / "panel.tsv"
+            panel.write_text("Pathway\tGene\tSample TPM\tPanel Flag\tCN Call\n"
+                             "antigen_presentation\tB2M\t12\tOK\tNEUTRAL\n")
+            out = tmp / "r.tex"
+            pr.main(["--patient", "P1", "--purity", "0.6", "--callable-mb", "10",
+                     "--gene-panel", str(panel), "-o", str(out)])
+            text = out.read_text()
+        self.assertIn("B2M", text)
+
+    def test_hla_alleles_still_render(self):
+        text = self.render("--hla", "HLA-A*02:01,HLA-B*07:02")
+        self.assertIn("A*02:01", text)
         self.assertIn("Research use only", text)
         self.assertTrue(text.rstrip().endswith(r"\end{document}"))
 

@@ -1,5 +1,12 @@
 # Architecture
 
+Which of the steps below run is chosen with `--run`
+(see [`RUNNING.md`](RUNNING.md)). Steps 1 and 3 are core and always run,
+along with the HLA-LOH result and the Sequenza values read from the
+samplesheet. Steps 2, 4, 5 and 8 to 10 are the `somatic` analysis, step 6
+is `markers`, and step 7 is `fusion`. Step 11 runs either way and reports
+what the run produced.
+
 One path, per patient: tumour and matched-normal DNA to pVACseq
 neoantigen candidates with clonality. Entry point `main.nf`; one
 sub-workflow per stage in `workflows/`; processes in `modules/local/`;
