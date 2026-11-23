@@ -9,7 +9,8 @@ from what this pipeline produces and made melanoma-specific:
   * genomic subtype (TCGA SKCM 2015: BRAF hotspot / RAS hotspot / NF1 /
     triple wild-type) and the status of each panel driver, with BRAF
     V600 / non-V600 class called from the protein change;
-  * tumour mutational burden, with the 10 mut/Mb TMB-high line, and a UV
+  * tumour mutational burden (non-synonymous), with the 13 mut/Mb TMB-high
+    line, and a UV
     signature read-out (C>T share, C>T at dipyrimidines, CC>TT doublets);
   * purity, ploidy and CCF-based clonality;
   * HLA class I and II alleles, homozygous loci, and gene-level copy
@@ -54,7 +55,7 @@ import annotate_ccf  # noqa: E402
 import gene_panel_report  # noqa: E402
 import rna_support as rs  # noqa: E402
 
-TMB_HIGH = 10.0
+TMB_HIGH = 13.0
 
 # Codons recurrently mutated in melanoma (TCGA SKCM 2015; Dankort/Yao BRAF
 # classes; COSMIC). Used for labelling only: every mutation in a driver gene
@@ -98,7 +99,13 @@ def num(value, digits=2, na="NA"):
 def table(header, rows, spec=None, size=r"\small", caption=None, long=False):
     """booktabs table; long=True uses longtable so it can break across pages."""
     spec = spec or "l" * len(header)
-    head = " & ".join(rf"\textbf{{{tex(h)}}}" for h in header) + r" \\"
+    def heading(h):
+        if isinstance(h, (tuple, list)):
+            stacked = (r"\\").join(rf"\textbf{{{tex(part)}}}" for part in h)
+            return rf"\shortstack[r]{{{stacked}}}"
+        return rf"\textbf{{{tex(h)}}}"
+
+    head = " & ".join(heading(h) for h in header) + r" \\"
     body = "\n".join(" & ".join(cells) + r" \\" for cells in rows)
     if long:
         cap = rf"\caption{{{caption}}}\\" if caption else ""
@@ -453,6 +460,225 @@ PREAMBLE = r"""\documentclass[10pt]{article}
 """
 
 
+def panel_timepoint_columns(rows):
+    """-> [(label, TPM column, log2FC column)] for each timepoint in the panel."""
+    if not rows:
+        return []
+    found = []
+    for column in rows[0]:
+        if column.startswith("TPM (") and column.endswith(")"):
+            label = column[len("TPM ("):-1]
+            found.append((label, column, "Log2FC (%s)" % label))
+    return found
+
+
+def panel_timepoint_block(rows, threshold, response=None):
+    """Panel genes whose expression moved between timepoints, largest first.
+
+    The pathway table says what is adverse at baseline; this says what changed
+    on treatment, which is the question a second timepoint was taken to answer.
+    Genes that moved less than the threshold are left out rather than listed as
+    noise, and the appendix still carries every value.
+    """
+    timepoints = panel_timepoint_columns(rows)
+    if not timepoints:
+        return []
+    moved = []
+    for row in rows:
+        changes, biggest = [], 0.0
+        for label, tpm_column, fc_column in timepoints:
+            fc = rs.parse_float(row.get(fc_column))
+            changes.append((label, row.get(tpm_column), fc))
+            if fc is not None and abs(fc) > abs(biggest):
+                biggest = fc
+        if abs(biggest) >= threshold:
+            moved.append((abs(biggest), row, changes))
+    labels = ", ".join(label for label, _, _ in timepoints)
+    if not moved:
+        return [not_available("No panel gene moved by log2 fold change %g or more between the "
+                              "baseline and %s." % (threshold, labels))]
+    moved.sort(key=lambda item: -item[0])
+    header = ["Pathway", "Gene", "Baseline TPM"]
+    for label, _, _ in timepoints:
+        header += ["%s TPM" % label, "log2FC %s" % label]
+    body = []
+    for _, row, changes in moved[:25]:
+        cells = [tex(row.get("Pathway", "").replace("_", " ")), tex(row.get("Gene")),
+                 tex(row.get("Sample TPM"))]
+        for _label, tpm, fc in changes:
+            if fc is None:
+                cells += [tex(tpm), "NA"]
+            else:
+                colour = "PASS" if fc > 0 else "FAIL"
+                cells += [tex(tpm), r"\textcolor{%s}{%+.2f}" % (colour, fc)]
+        body.append(cells)
+    out = [table(header, body, spec="ll" + "r" * (len(header) - 2), size=r"\footnotesize",
+                 long=True,
+                 caption="Panel genes whose expression moved by log2 fold change %g or more "
+                         "between timepoints" % threshold)]
+    out.append("Green is up at the later timepoint, red is down. Fold changes carry a +1 TPM "
+               "pseudocount, so a gene switching on from zero stays finite. Bulk RNA from a "
+               "treated sample mixes tumour with infiltrate, so a rise in presentation or "
+               "interferon genes can mean the tumour turned them on or that more immune cells "
+               "are present; the two cannot be separated without sorting or deconvolution.\n")
+    if response_category(response) == "none":
+        out.append(r"\fcolorbox{WARN}{white}{\parbox{0.96\textwidth}{\small\textbf{Read with the "
+                   r"recorded response.} This patient is a pathological non-responder, so an "
+                   r"interferon and class II signature at the later timepoint is not evidence that "
+                   r"the tumour was cleared. Viable tumour remained; the most likely reading is "
+                   r"immune cells crowding into the sample and diluting tumour transcripts, which "
+                   r"lowers tumour-derived RNA VAFs without any tumour cell dying. An inflamed "
+                   r"lesion that progresses anyway is a different and more interesting problem "
+                   r"than one the immune system never reached.}}" + "\n")
+    return out
+
+
+NON_RESPONSE = ("pnr", "non-response", "nonresponse", "no response", "pd",
+                "progressive disease")
+PARTIAL_RESPONSE = ("ppr", "partial")
+COMPLETE_RESPONSE = ("pcr", "near-pcr", "near pcr", "complete")
+
+
+def response_category(value):
+    """-> 'complete', 'partial', 'none' or None, from free text.
+
+    near-pCR is checked before pCR, and pNR before everything, so the longer
+    label is not swallowed by a shorter prefix.
+    """
+    if not value:
+        return None
+    lowered = str(value).strip().lower()
+    if any(lowered.startswith(k) for k in NON_RESPONSE):
+        return "none"
+    if any(lowered.startswith(k) for k in PARTIAL_RESPONSE):
+        return "partial"
+    if any(lowered.startswith(k) for k in COMPLETE_RESPONSE):
+        return "complete"
+    return None
+
+
+def response_cell(value):
+    if not value:
+        return tex("not recorded")
+    colour = {"complete": "PASS", "partial": "WARN", "none": "FAIL"}.get(response_category(value))
+    return rf"\textcolor{{{colour}}}{{{tex(value)}}}" if colour else tex(value)
+
+
+def recurrence_cell(value):
+    """Colour a recorded recurrence, leave an unrecorded one plain.
+
+    "not recorded" is not "no recurrence", so only an explicit value is
+    coloured; the absence of a value is never read as good news.
+    """
+    if not value:
+        return tex("not recorded")
+    lowered = str(value).strip().lower()
+    if lowered.startswith(("yes", "recurred", "relapse")):
+        return rf"\textcolor{{FAIL}}{{{tex(value)}}}"
+    if lowered.startswith(("no", "none", "disease-free", "disease free")):
+        return rf"\textcolor{{PASS}}{{{tex(value)}}}"
+    return tex(value)
+
+
+def breakable(text):
+    """Allow a line break after each ';' in a long joined field.
+
+    LaTeX breaks lines at spaces, and these fields have none, so a cell like
+    "missense_variant:p.Val640Glu;missense_variant:p.Val157Glu;..." is one
+    unbreakable word that no column width can contain.
+    """
+    return (text or "").replace(";", r";\allowbreak{}")
+
+
+def vaf_with_depth(vaf, depth):
+    """0.76 and 153 -> "0.76 (153)". A VAF without its depth is unreadable:
+    1.00 off two reads and 1.00 off two hundred are not the same claim."""
+    if vaf is None and depth is None:
+        return "NA"
+    if depth is None:
+        return num(vaf)
+    if vaf is None:
+        return "NA (%s)" % num(depth, 0)
+    return "%s (%s)" % (num(vaf), num(depth, 0))
+
+
+def read_variant_rna(spec):
+    """'Baseline=P1.variant_rna.tsv' -> (label, {(chrom, pos): row}).
+
+    A pVACseq all_epitopes report carries DNA and RNA counts per variant, so
+    it covers variants whose peptides all bind too weakly to survive the
+    filtered report - which is where the drivers live, since BRAF V600E and
+    its neighbours are poor binders on most alleles.
+    """
+    label, separator, path = str(spec).partition("=")
+    if not separator or not label.strip() or not path.strip():
+        raise SystemExit(f"--variant-rna needs LABEL=TSV, got: {spec}")
+    label, path = label.strip(), Path(path.strip())
+    if not path.is_file():
+        raise SystemExit(f"--variant-rna {label}: no such file: {path}")
+    by_site = {}
+    with open(path, newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            chrom, position = row.get("Chromosome"), row.get("Position")
+            if chrom and position:
+                by_site[(chrom, str(position))] = row
+    return label, by_site
+
+
+def unsigned_zero(value):
+    """-0.4 -> 0.0, so a DAI rounded to zero decimals never prints as "-0"."""
+    if value is None:
+        return None
+    return 0.0 if abs(value) < 0.5 else value
+
+
+def panel_expression_table(rows):
+    """Every presentation-machinery gene, with its GTEx range and each
+    timepoint's TPM beside it.
+
+    The pathway summary says which genes are flagged; this is the evidence
+    the flag came from, so a reader can see that a gene called DOWN sits at
+    249 TPM against a whole-tissue range of 400-6402 rather than at zero.
+    """
+    if not rows:
+        return []
+    timepoints = panel_timepoint_columns(rows)
+    header = ["Pathway", "Gene", ("GTEx", "range"), ("TPM", "baseline")]
+    header += [("TPM", label) for label, _, _ in timepoints]
+    header += [("GTEx", "call"), "Flag"]
+    body = []
+    for row in rows:
+        cells = [tex(row.get("Pathway", "").replace("_", " ")), tex(row.get("Gene")),
+                 tex(row.get("GTEx Range", "NA")), tex(row.get("Sample TPM", "NA"))]
+        for _label, tpm_column, _fc in timepoints:
+            cells.append(tex(row.get(tpm_column, "NA")))
+        cells += [tex(row.get("GTEx Call", "NA")), flag_colour(row.get("Panel Flag"))]
+        body.append(cells)
+    return [table(header, body, spec="ll" + "r" * (len(header) - 3) + "l",
+                  size=r"\scriptsize", long=True,
+                  caption="Presentation-machinery genes: GTEx reference range and this "
+                          "patient's expression at each timepoint")]
+
+
+def unique_fusion_peptides(rows):
+    """One row per distinct peptide/allele, keeping the first of each.
+
+    pVACfuse names a candidate after the transcript pair, so a single gene
+    fusion expands into one row for every pair of partner transcripts that
+    carries the same junction - 182 of them for one fusion in this cohort.
+    They are the same peptide on the same allele and ordering them as
+    separate candidates would overstate what is there.
+    """
+    seen, kept = set(), []
+    for row in rows:
+        key = (row.get("Gene"), row.get("Best Peptide"), row.get("Allele"))
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(row)
+    return kept
+
+
 def build_report(args):
     # --vcf is absent when the run did not include somatic calling (see
     # --run in docs/RUNNING.md). Everything derived from variants is then
@@ -479,6 +705,11 @@ def build_report(args):
     driver_genes = {g for p, genes in gene_panel_report.DEFAULT_PANEL.items() if p.startswith("driver_") for g in genes}
     driver_genes |= {r["Gene"] for r in panel_rows if r.get("Pathway", "").startswith("driver_")}
     drivers = driver_mutations(variants, driver_genes, ccfs)
+    variant_rna = [read_variant_rna(spec) for spec in args.variant_rna]
+    driver_sites = {}
+    for _label, by_site in variant_rna:
+        for site, row in by_site.items():
+            driver_sites.setdefault((row.get("Gene"), row.get("AA Change")), site)
     subtype, braf_status = melanoma_subtype(drivers)
 
     class_i, class_ii = split_hla(args.hla)
@@ -510,6 +741,12 @@ def build_report(args):
         ("Patient", tex(args.patient)),
         ("Project", tex(args.project or "NA")),
         ("Diagnosis", tex(args.diagnosis)),
+        ("Age at baseline", tex(args.age or "not recorded")),
+        ("Tumour site", tex(args.site or "not recorded")),
+        ("Stage", tex(args.stage or "not recorded")),
+        ("Prior therapy", tex(args.prior_therapy or "not recorded")),
+        ("Response to prior therapy", response_cell(args.response)),
+        ("Recurrence", recurrence_cell(args.recurrence)),
         ("Matched TCGA cohort / GTEx tissue", tex(f"{args.tcga_cancer_type or 'NA'} / {args.gtex_tissue or 'NA'}")),
         ("Tumour RNA timepoints", tex(rna_text)),
         ("Purity (Sequenza)", num(args.purity) + (r" \textcolor{WARN}{(below 0.3: CCF and CN unreliable)}" if args.purity < 0.3 else "")),
@@ -519,8 +756,11 @@ def build_report(args):
         ("BRAF status", tex(braf_status)),
         ("PASS somatic variants / non-synonymous",
          f"{len(variants)} / {len(non_syn)}" if somatic_assessed else "NA (somatic calling not run)"),
-        ("TMB (all PASS, mut/Mb)", (rf"\textbf{{{num(tmb)}}}" + (r" \textcolor{FAIL}{TMB-high}" if tmb >= TMB_HIGH else ""))
-         if tmb is not None else "NA"),
+        ("TMB (non-synonymous, mut/Mb)",
+         (rf"\textbf{{{num(tmb_ns)}}}" + (r" \textcolor{FAIL}{TMB-high}"
+                                          if tmb_ns >= TMB_HIGH else r" \textcolor{PASS}{not TMB-high}"))
+         if tmb_ns is not None else "NA"),
+        ("TMB (all PASS, mut/Mb)", num(tmb) if tmb is not None else "NA"),
         ("Clonal non-synonymous (CCF $\\geq$ " + f"{args.clonal_ccf:g})", f"{clonal_ns} of {len(ns_ccf)}" if ns_ccf else "NA"),
         ("UV signature (C>T of SNVs)",
          f"{100 * uv['ct_fraction']:.0f}\\%" if uv and uv["ct_fraction"] is not None else "NA"),
@@ -558,14 +798,42 @@ def build_report(args):
                r"are non-coding and usually absent from an exome call set, so a blank TERT row is not evidence "
                r"of a wild-type promoter." + "\n")
     if drivers:
+        panel_timepoints = panel_timepoint_columns(panel_rows)
         rows = []
         for gene, change, consequence, dna_vaf, ccf, rna_vaf, hotspot in drivers:
             p = panel_by_gene.get(gene, {})
-            rows.append([rf"\textbf{{{tex(gene)}}}", tex(change), tex(consequence.replace("_variant", "")),
-                         tex(hotspot or "-"), num(dna_vaf), num(ccf), num(rna_vaf),
-                         tex(p.get("CN Call", "NA")), tex(p.get("GTEx Call", "NA"))])
-        out.append(table(["Gene", "Change", "Consequence", "Hotspot", "DNA VAF", "CCF", "RNA VAF", "CN", "Expr vs GTEx"],
-                         rows, spec="lllllrrrll", size=r"\footnotesize", caption="Coding mutations in melanoma driver genes"))
+            site = driver_sites.get((gene, change))
+            cells = [rf"\textbf{{{tex(gene)}}}", tex(change), tex(consequence.replace("_variant", "")),
+                     tex(hotspot or "-"), num(dna_vaf), num(ccf)]
+            if variant_rna:
+                for _label, by_site in variant_rna:
+                    row = by_site.get(site) if site else None
+                    cells.append(vaf_with_depth(rs.parse_float(row.get("RNA VAF")),
+                                                rs.parse_float(row.get("RNA Depth")))
+                                 if row else "NA")
+            else:
+                cells.append(num(rna_vaf))
+            cells.append(tex(p.get("Sample TPM", "NA")))
+            for _label, tpm_column, _fc in panel_timepoints:
+                cells.append(tex(p.get(tpm_column, "NA")))
+            cells += [tex(p.get("CN Call", "NA")), tex(p.get("GTEx Call", "NA"))]
+            rows.append(cells)
+        header = ["Gene", "Change", "Consequence", "Hotspot", "DNA VAF", "CCF"]
+        if variant_rna:
+            for label, _ in variant_rna:
+                header.append(("RNA %s" % label, "VAF (reads)"))
+        else:
+            header.append("RNA VAF")
+        header += [("TPM", "baseline")] + [("TPM", label) for label, _, _ in panel_timepoints]
+        header += ["CN", ("Expr vs", "GTEx")]
+        out.append(table(header, rows,
+                         spec="llll" + "r" * (len(header) - 6) + "ll",
+                         size=r"\scriptsize", long=True,
+                         caption="Coding mutations in melanoma driver genes"))
+        out.append("RNA VAF and RNA reads are the mutant allele fraction and the read depth at that "
+                   "site in tumour RNA, read from the pVACseq all\\_epitopes report so that a driver "
+                   "whose peptides all bind weakly is still covered. TPM columns are gene-level and "
+                   "say whether the gene is transcribed, not whether the mutant allele is.\n")
     else:
         out.append(not_available("No coding mutation in the panel's driver genes."))
     cn_drivers = [r for r in panel_rows if r.get("Pathway", "").startswith("driver_")
@@ -636,7 +904,11 @@ def build_report(args):
                          caption="Presentation-machinery panel, by pathway (full table in the appendix)"))
         out.append("Flags are factual, not verdicts: expression is called against the matched GTEx tissue, copy "
                    "number against sample ploidy, and a truncating mutation counts as loss. HLA-E and HLA-G are "
-                   "gain-polarity (inhibitory ligands). Low purity pushes expression towards DOWN.\n")
+                   "gain-polarity (inhibitory ligands). A tumour-rich sample reads DOWN against "
+                   "whole-tissue GTEx for anything the stroma and infiltrate normally express, so "
+                   "read a lone expression flag next to the purity.\n")
+        out += panel_expression_table(apm)
+        out += panel_timepoint_block(apm, args.panel_change_log2fc, args.response)
     else:
         out.append(not_available("Gene panel not run (it needs --gtex_db or --tcga_db)."))
 
@@ -660,10 +932,11 @@ def build_report(args):
         top_consequences = sorted(consequences.items(), key=lambda kv: -kv[1])[:12]
         out.append(table(["Consequence (canonical transcript)", "n"], [[tex(k), str(n)] for k, n in top_consequences] or [["none", "0"]],
                          spec="lr", size=r"\small", caption="Most frequent consequences"))
-        tmb_line = (f"TMB is {num(tmb)} mut/Mb over all PASS variants and {num(tmb_ns)} non-synonymous mut/Mb, "
+        tmb_line = (f"TMB is {num(tmb_ns)} non-synonymous mut/Mb, and {num(tmb)} mut/Mb over all PASS variants, "
                     f"over {num(size_mb, 1)} Mb ({tex(size_basis)}). ") if tmb is not None else \
             f"TMB not computed: {tex(size_basis)}. "
-        out.append(tmb_line + f"The usual TMB-high line is {TMB_HIGH:g} mut/Mb; panel and exome TMB differ, so "
+        out.append(tmb_line + f"TMB-high is taken as {TMB_HIGH:g} non-synonymous mut/Mb, the FDA-approved "
+                   "threshold; panel and exome TMB differ, so "
                    "compare within one assay.\n")
         uv_bits = [f"{uv['ct']} of {uv['snvs']} SNVs are C>T"]
         if uv["dipyrimidine_fraction"] is not None:
@@ -744,8 +1017,10 @@ def build_report(args):
                             "Flags across all candidates. Red flags reject a candidate, amber ones caution. "
                             "Nothing was deleted: every candidate keeps its row in the prioritised table.",
                             width=r"0.9\textwidth"))
-    week6_col = next((c for c in (class_i_rows[0] if class_i_rows else (class_ii_rows[0] if class_ii_rows else {}))
-                      if c.startswith("RNA VAF (")), None)
+    candidate_columns = (class_i_rows[0] if class_i_rows
+                         else (class_ii_rows[0] if class_ii_rows else {}))
+    week6_col = next((c for c in candidate_columns if c.startswith("RNA VAF (")), None)
+    week6_depth_col = next((c for c in candidate_columns if c.startswith("RNA Depth (")), None)
     for label, rows_in, ic50, pct in (("MHC class I", class_i_rows, args.class_i_ic50, args.class_i_percentile),
                                       ("MHC class II", class_ii_rows, args.class_ii_ic50, args.class_ii_percentile)):
         out.append(rf"\subsection{{{label}}}")
@@ -754,20 +1029,30 @@ def build_report(args):
             out.append(not_available(f"No {label} binders" + ("" if rows_in else " (report not available)") + "."))
             continue
         first = timepoints[0] if timepoints else "RNA"
-        header = ["Gene", "Change", "Best peptide", "Allele", "IC50", "%ile", "DNA VAF", "CCF",
-                  f"RNA VAF {first}" if timepoints else "RNA VAF"]
+        later = week6_col[len("RNA VAF ("):-1] if week6_col else None
+        header = ["Gene", "Change", "Best peptide", "Allele", "IC50", "%ile", "DAI",
+                  ("DNA", "VAF"), "CCF",
+                  ("RNA %s" % first, "VAF (reads)") if timepoints else ("RNA", "VAF (reads)")]
         if week6_col:
-            header.append(week6_col.replace("(", "").replace(")", ""))
-        header += ["Expr", "Tier"]
+            header.append(("RNA %s" % later, "VAF (reads)"))
+        has_tier = any((r.get("Tier") or "NA") != "NA" for r in ranked)
+        header += ["Expr"] + (["Tier"] if has_tier else [])
         rows = []
         for r in ranked:
             cells = [tex(r.get("Gene")), tex(r.get("AA Change")), r"\texttt{" + tex(r.get("Best Peptide")) + "}",
                      tex((r.get("Allele") or "").replace("HLA-", "")), num(rs.parse_float(r.get("IC50 MT")), 0),
-                     num(rs.parse_float(r.get("%ile MT")), 2), num(rs.parse_float(r.get("DNA VAF"))),
-                     num(rs.parse_float(r.get("CCF"))), num(rs.parse_float(r.get("RNA VAF")))]
+                     num(rs.parse_float(r.get("%ile MT")), 2), num(unsigned_zero(rs.parse_float(r.get("DAI"))), 0),
+                     num(rs.parse_float(r.get("DNA VAF"))),
+                     num(rs.parse_float(r.get("CCF"))),
+                     vaf_with_depth(rs.parse_float(r.get("RNA VAF")),
+                                    rs.parse_float(r.get("RNA Depth")))]
             if week6_col:
-                cells.append(num(rs.parse_float(r.get(week6_col))))
-            cells += [tex(r.get("Expression Flag", "NA")), tex(r.get("Tier", "NA"))]
+                cells.append(vaf_with_depth(
+                    rs.parse_float(r.get(week6_col)),
+                    rs.parse_float(r.get(week6_depth_col)) if week6_depth_col else None))
+            cells.append(tex(r.get("Expression Flag", "NA")))
+            if has_tier:
+                cells.append(tex(r.get("Tier", "NA")))
             rows.append(cells)
         out.append(table(header, rows,
                          spec="ll>{\\raggedright\\arraybackslash}p{0.17\\textwidth}l" + "r" * (len(header) - 6) + "ll",
@@ -797,13 +1082,16 @@ def build_report(args):
                        "pVACfuse to score. This is not a failure: most fusion calls are intergenic, out of frame "
                        "or non-coding on at least one side.\n")
         else:
+            fusion_reports = {mhc: unique_fusion_peptides(rows) for mhc, rows in fusion_reports.items()}
             counts = {mhc: sum(1 for r in fusion_reports[mhc]
                                if binder(r, getattr(args, f"class_{mhc.lower()}_ic50"),
                                          getattr(args, f"class_{mhc.lower()}_percentile")))
                       for mhc in ("I", "II")}
-            out.append(f"pVACfuse scored {len(fusion_reports['I'])} class I and {len(fusion_reports['II'])} class II "
-                       f"fusion epitopes, of which {counts['I']} and {counts['II']} pass the binder thresholds "
-                       "used elsewhere in this report.\n")
+            out.append(f"pVACfuse scored {len(fusion_reports['I'])} unique class I and {len(fusion_reports['II'])} unique class II "
+                       f"fusion peptides, of which {counts['I']} and {counts['II']} pass the binder thresholds "
+                       "used elsewhere in this report. Counts are per distinct peptide and allele: pVACfuse "
+                       "reports one row per pair of partner transcripts, so one fusion expands into many "
+                       "identical rows.\n")
             for mhc, label in (("I", "MHC class I"), ("II", "MHC class II")):
                 ranked = rank_fusions(fusion_reports[mhc],
                                       getattr(args, f"class_{mhc.lower()}_ic50"),
@@ -823,7 +1111,7 @@ def build_report(args):
                                  num(rs.parse_float(r.get("Expr")), 2),
                                  tex(r.get("Tier", "NA")), tex(fusion_note(gene) or "-")])
                 out.append(table(["Fusion", "Best peptide", "Allele", "IC50", "%ile", "Reads", "Expr", "Tier", "Note"],
-                                 rows, spec="l>{\\raggedright\\arraybackslash}p{0.16\\textwidth}lrrrrlp{0.2\\textwidth}",
+                                 rows, spec=">{\\raggedright\\arraybackslash}p{0.12\\textwidth}>{\\raggedright\\arraybackslash}p{0.17\\textwidth}>{\\raggedright\\arraybackslash}p{0.13\\textwidth}rrrrl>{\\raggedright\\arraybackslash}p{0.15\\textwidth}",
                                  size=r"\scriptsize", long=True,
                                  caption=f"{label} fusion candidates, best read and expression support first"))
             out.append(rf"Reads is pVACfuse's junction plus spanning read support and Expr its FFPM, both from the "
@@ -874,11 +1162,22 @@ def build_report(args):
     # Appendix: full panel ----------------------------------------------------
     if panel_rows:
         out.append(r"\clearpage\appendix\section{Full gene panel}")
-        rows = [[tex(r.get("Pathway", "").replace("_", " ")), tex(r.get("Gene")), tex(r.get("Sample TPM")),
-                 tex(r.get("GTEx Call")), tex(r.get("TCGA Call")), tex(r.get("CN Call")),
-                 r"\raggedright " + tex(r.get("Mutations")), flag_colour(r.get("Panel Flag"))] for r in panel_rows]
-        out.append(table(["Pathway", "Gene", "TPM", "GTEx", "TCGA", "CN", "Mutations", "Flag"], rows,
-                         spec="llrlllp{0.22\\textwidth}l", size=r"\scriptsize", long=True))
+        timepoints = panel_timepoint_columns(panel_rows)
+        rows = []
+        for r in panel_rows:
+            cells = [tex(r.get("Pathway", "").replace("_", " ")), tex(r.get("Gene")),
+                     tex(r.get("Sample TPM"))]
+            for _label, tpm_column, _fc in timepoints:
+                cells.append(tex(r.get(tpm_column)))
+            cells += [tex(r.get("GTEx Call")), tex(r.get("TCGA Call")), tex(r.get("CN Call")),
+                      r"\raggedright " + breakable(tex(r.get("Mutations"))),
+                      flag_colour(r.get("Panel Flag"))]
+            rows.append(cells)
+        header = (["Pathway", "Gene", "TPM"] + ["TPM %s" % label for label, _, _ in timepoints]
+                  + ["GTEx", "TCGA", "CN", "Mutations", "Flag"])
+        out.append(table(header, rows,
+                         spec="ll" + "r" * (1 + len(timepoints)) + "lllp{0.22\\textwidth}l",
+                         size=r"\scriptsize", long=True))
 
     out.append(r"\end{document}")
     return "\n".join(out) + "\n"
@@ -901,6 +1200,12 @@ def main(argv=None):
     parser.add_argument("--callable-mb", type=float, help="TMB denominator in Mb; overrides --target-bed")
     parser.add_argument("--contigs", help="comma-separated called contigs, for a WGS denominator from the .fai")
     parser.add_argument("--gene-panel", type=Path)
+    parser.add_argument("--variant-rna", action="append", default=[], metavar="LABEL=TSV",
+                        help="per-variant DNA/RNA counts for that timepoint, from a pVACseq "
+                             "all_epitopes report; repeat for each timepoint")
+    parser.add_argument("--panel-change-log2fc", type=float, default=1.0,
+                        help="report a panel gene whose expression moved by at least this log2 "
+                             "fold change between timepoints (default 1.0, a doubling)")
     parser.add_argument("--class-i", type=Path, help="MHC I aggregated report (expression- or CCF-annotated)")
     parser.add_argument("--class-ii", type=Path, help="MHC II aggregated report (expression- or CCF-annotated)")
     parser.add_argument("--pvacfuse-dir", type=Path,
@@ -920,6 +1225,13 @@ def main(argv=None):
     parser.add_argument("--hla-loh", type=Path, help="tidy HLA-LOH table from parse_hla_loh.py")
     parser.add_argument("--timepoint-label", action="append", help="RNA timepoint labels, in order")
     parser.add_argument("--project", default="")
+    parser.add_argument("--age", help="age at the baseline sample")
+    parser.add_argument("--site", help="tumour site, e.g. 'axillary node'")
+    parser.add_argument("--stage")
+    parser.add_argument("--prior-therapy", help="therapy before the baseline sample")
+    parser.add_argument("--response", help="response to that therapy, in your own words")
+    parser.add_argument("--recurrence", help="recurrence status; an explicit value is "
+                                             "coloured, an absent one reads 'not recorded'")
     parser.add_argument("--diagnosis", default="Melanoma")
     parser.add_argument("--tcga-cancer-type", default="")
     parser.add_argument("--gtex-tissue", default="")
