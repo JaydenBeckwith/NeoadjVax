@@ -380,7 +380,39 @@ def panel_flag(expression, cn_call, mutations, polarity="loss"):
     return "OK"
 
 
-def build_rows(panel, gain_polarity, args, sample, gtex, tcga, spans, segments, mutations):
+def parse_timepoint(spec):
+    """'Week 6=P1.week6.tpm.tsv' -> ('Week 6', Path). Mirrors agretopicity.py."""
+    label, separator, path = str(spec).partition("=")
+    if not separator or not label.strip() or not path.strip():
+        raise SystemExit(f"--timepoint needs LABEL=TPM_TABLE, got: {spec}")
+    return label.strip(), Path(path.strip())
+
+
+def log2_fold_change(later, baseline):
+    """log2((later + 1) / (baseline + 1)). The pseudocount keeps a gene that
+    switches on from zero finite, which is exactly the case worth seeing."""
+    if later is None or baseline is None:
+        return None
+    return math.log2((later + 1.0) / (baseline + 1.0))
+
+
+def columns(timepoint_labels):
+    """COLUMNS with a TPM and a log2FC column per extra timepoint.
+
+    The extra columns sit next to Sample TPM rather than at the end, so the
+    expression story reads left to right in the table.
+    """
+    extra = []
+    for label in timepoint_labels:
+        extra += [f"TPM ({label})", f"Log2FC ({label})"]
+    head = ["Pathway", "Gene", "Sample TPM"] + extra
+    return head + ["GTEx Range", "GTEx Basis", "GTEx Call", "TCGA Range", "TCGA Call",
+                   "Tumor CN", "Minor CN", "CN Call", "Mutations", "Truncating",
+                   "Adverse Direction", "Panel Flag"]
+
+
+def build_rows(panel, gain_polarity, args, sample, gtex, tcga, spans, segments, mutations,
+               timepoints=()):
     baseline = args.ploidy if args.ploidy else 2.0
     rows = []
     for pathway in panel:
@@ -401,7 +433,12 @@ def build_rows(panel, gain_polarity, args, sample, gtex, tcga, spans, segments, 
             truncating = "yes" if any(m[0] in TRUNCATING for m in gene_mutations) else "no"
 
             polarity = "gain" if gene in gain_polarity else "loss"
-            rows.append([pathway, gene, fmt(sample_tpm), f"{fmt(low)}-{fmt(high)}" if low is not None else "NA",
+            timepoint_cells = []
+            for _label, table in timepoints:
+                later = table.get(gene)
+                timepoint_cells += [fmt(later), fmt(log2_fold_change(later, sample_tpm), 2)]
+            rows.append([pathway, gene, fmt(sample_tpm)] + timepoint_cells +
+                        [f"{fmt(low)}-{fmt(high)}" if low is not None else "NA",
                          basis, call, f"{fmt(tcga_low)}-{fmt(tcga_high)}" if tcga_low is not None else "NA",
                          tcga_call, fmt(total_cn, 2), fmt(minor_cn, 2), cn_call, formatted, truncating,
                          polarity, panel_flag(call, cn_call, gene_mutations, polarity)])
@@ -418,6 +455,9 @@ def main(argv=None):
     parser.add_argument("--panel", type=Path,
                         help="gene<TAB>pathway[<TAB>loss|gain] table replacing the built-in panel")
     parser.add_argument("--sample-tpm", type=Path, help="this sample's TPM table from gene_tpm.py")
+    parser.add_argument("--timepoint", action="append", default=[], metavar="LABEL=TPM_TABLE",
+                        help="a further timepoint's TPM table, e.g. 'Week 6=P1.week6.tpm.tsv'; "
+                             "adds a TPM and a log2FC column per timepoint")
     parser.add_argument("--gtex", type=Path)
     parser.add_argument("--gtex-tissue")
     parser.add_argument("--tcga", type=Path)
@@ -446,6 +486,14 @@ def main(argv=None):
     gtex = read_expression_db(args.gtex) if args.gtex else {}
     tcga = read_expression_db(args.tcga) if args.tcga else {}
     sample = read_sample_tpm(args.sample_tpm) if args.sample_tpm else {}
+    timepoints = []
+    for spec in args.timepoint:
+        label, path = parse_timepoint(spec)
+        if not path.is_file():
+            raise SystemExit(f"--timepoint {label}: no such file: {path}")
+        timepoints.append((label, read_sample_tpm(path)))
+    if timepoints and not args.sample_tpm:
+        raise SystemExit("--timepoint needs --sample-tpm: the log2FC is measured against it")
     spans = read_gene_spans(args.gtf) if args.gtf else {}
     segments = read_segments(args.segments) if args.segments else None
     mutations = read_vep_mutations(args.vep_vcf, genes) if args.vep_vcf else {}
@@ -456,10 +504,11 @@ def main(argv=None):
             available = sorted({g for groups in db.values() for g in groups})
             raise SystemExit(f"{name} '{group}' is not in the table. Available: " + ", ".join(available))
 
-    rows = build_rows(panel, gain_polarity, args, sample, gtex, tcga, spans, segments, mutations)
+    rows = build_rows(panel, gain_polarity, args, sample, gtex, tcga, spans, segments, mutations,
+                      timepoints)
     with args.output.open("w", newline="") as handle:
         writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
-        writer.writerow(COLUMNS)
+        writer.writerow(columns([label for label, _ in timepoints]))
         writer.writerows(rows)
 
     flagged = [row for row in rows if row[-1] in ("LOSS_OF_FUNCTION", "INHIBITORY_GAIN")]
